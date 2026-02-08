@@ -1,0 +1,482 @@
+nexus-frontend/
+├── package.json
+├── vite.config.js
+├── tailwind.config.js
+├── tsconfig.json (switch to TypeScript)
+├── .env.local
+├── .env.production
+│
+├── public/
+│   ├── index.html
+│   └── favicon.ico
+│
+├── src/
+│   ├── main.jsx
+│   ├── App.jsx
+│   ├── index.css
+│   │
+│   ├── core/                           # Core infrastructure (don't touch often)
+│   │   ├── api/                        # HTTP client & interceptors
+│   │   │   ├── client.js               # Axios instance with auth/error handling
+│   │   │   ├── interceptors.js         # req/res interceptors
+│   │   │   └── errorHandler.js         # Centralized error handling
+│   │   │
+│   │   ├── ws/                         # WebSocket management
+│   │   │   ├── wsManager.js            # Single WS connection pool
+│   │   │   ├── wsEvents.js             # Event constants (BALANCE, TICK, etc)
+│   │   │   ├── wsSubscriptions.js      # Subscription manager
+│   │   │   └── wsReconnect.js          # Exponential backoff retry
+│   │   │
+│   │   ├── storage/                    # LocalStorage/SessionStorage helpers
+│   │   │   ├── auth.js                 # JWT token storage
+│   │   │   ├── cache.js                # API response caching
+│   │   │   └── preferences.js          # User settings persistence
+│   │   │
+│   │   ├── constants/                  # App-wide constants
+│   │   │   ├── api.js                  # API endpoints
+│   │   │   ├── trading.js              # Trade constants (min stake, etc)
+│   │   │   ├── regex.js                # Validation patterns
+│   │   │   └── messages.js             # Error/success messages
+│   │   │
+│   │   └── utils/                      # Pure utility functions
+│   │       ├── formatters.js           # formatCurrency, formatDate
+│   │       ├── validators.js           # Email, amount, password
+│   │       ├── math.js                 # Fibonacci, P&L calculations
+│   │       └── helpers.js              # Common helper functions
+│   │
+│   ├── features/                       # Feature modules (auth, trading, etc)
+│   │   │
+│   │   ├── auth/
+│   │   │   ├── contexts/
+│   │   │   │   └── AuthContext.jsx     # Auth state (user, token, session)
+│   │   │   ├── hooks/
+│   │   │   │   ├── useAuth.js          # Login/logout/refresh
+│   │   │   │   ├── useOAuth.js         # Deriv OAuth flow
+│   │   │   │   └── useSession.js       # Monitor session expiry
+│   │   │   ├── pages/
+│   │   │   │   ├── Login.jsx
+│   │   │   │   ├── OAuthCallback.jsx
+│   │   │   │   └── OAuthRedirect.jsx
+│   │   │   ├── components/
+│   │   │   │   ├── LoginForm.jsx
+│   │   │   │   ├── OAuthButton.jsx
+│   │   │   │   └── SessionWarning.jsx
+│   │   │   ├── services/
+│   │   │   │   └── authService.js      # API calls (login, logout, refresh)
+│   │   │   └── index.js                # Export public API
+│   │   │
+│   │   ├── trading/
+│   │   │   ├── contexts/
+│   │   │   │   ├── TradingContext.jsx  # Real-time trade data
+│   │   │   │   └── BotContext.jsx      # Bot start/stop state
+│   │   │   ├── hooks/
+│   │   │   │   ├── useTrading.js       # Execute trade
+│   │   │   │   ├── useMarketData.js    # Real-time ticks/candles
+│   │   │   │   ├── useSignals.js       # Consensus signals
+│   │   │   │   ├── useRiskCalculator.js
+│   │   │   │   └── useBot.js           # Bot control
+│   │   │   ├── pages/
+│   │   │   │   ├── TradingDashboard.jsx
+│   │   │   │   ├── ManualTrading.jsx
+│   │   │   │   ├── AutoTrading.jsx
+│   │   │   │   └── SignalsMonitor.jsx
+│   │   │   ├── components/
+│   │   │   │   ├── TradePanel/
+│   │   │   │   │   ├── MarketSelector.jsx
+│   │   │   │   │   ├── ContractSelector.jsx
+│   │   │   │   │   ├── StakeInput.jsx
+│   │   │   │   │   ├── SignalDisplay.jsx
+│   │   │   │   │   ├── RiskWarning.jsx
+│   │   │   │   │   └── TradeButton.jsx
+│   │   │   │   ├── Charts/
+│   │   │   │   │   ├── PriceChart.jsx
+│   │   │   │   │   ├── CandlestickChart.jsx
+│   │   │   │   │   └── TickChart.jsx
+│   │   │   │   ├── TradeHistory/
+│   │   │   │   │   ├── OpenTrades.jsx
+│   │   │   │   │   ├── ClosedTrades.jsx
+│   │   │   │   │   └── TradeStats.jsx
+│   │   │   │   ├── BotControls/
+│   │   │   │   │   ├── BotStatus.jsx
+│   │   │   │   │   ├── StrategySelector.jsx
+│   │   │   │   │   ├── StakeSettings.jsx
+│   │   │   │   │   └── RiskLimits.jsx
+│   │   │   │   └── Signals/
+│   │   │   │       ├── SignalCard.jsx
+│   │   │   │       ├── SignalConsensus.jsx
+│   │   │   │       └── ConfidenceMetrics.jsx
+│   │   │   ├── services/
+│   │   │   │   ├── tradingService.js   # API: execute trade, close trade
+│   │   │   │   ├── marketService.js    # API: get market data
+│   │   │   │   ├── signalService.js    # API: get trading signals
+│   │   │   │   └── botService.js       # API: start/stop bot
+│   │   │   └── index.js
+│   │   │
+│   │   ├── accounts/
+│   │   │   ├── contexts/
+│   │   │   │   └── AccountContext.jsx  # Active account, balance updates
+│   │   │   ├── hooks/
+│   │   │   │   ├── useAccounts.js      # Fetch accounts
+│   │   │   │   ├── useAccount.js       # Switch account
+│   │   │   │   └── useBalance.js       # Real-time balance from WS
+│   │   │   ├── pages/
+│   │   │   │   ├── AccountList.jsx
+│   │   │   │   ├── AccountDetail.jsx
+│   │   │   │   └── AccountSettings.jsx
+│   │   │   ├── components/
+│   │   │   │   ├── AccountSwitcher.jsx
+│   │   │   │   ├── BalanceCard.jsx
+│   │   │   │   ├── AccountStats.jsx
+│   │   │   │   └── AccountModal.jsx
+│   │   │   ├── services/
+│   │   │   │   └── accountService.js
+│   │   │   └── index.js
+│   │   │
+│   │   ├── dashboard/
+│   │   │   ├── pages/
+│   │   │   │   ├── UserDashboard.jsx
+│   │   │   │   ├── TradingDashboard.jsx
+│   │   │   │   └── AdminDashboard.jsx
+│   │   │   ├── components/
+│   │   │   │   ├── StatCards/
+│   │   │   │   │   ├── BalanceCard.jsx
+│   │   │   │   │   ├── ProfitCard.jsx
+│   │   │   │   │   ├── WinRateCard.jsx
+│   │   │   │   │   └── OpenTradesCard.jsx
+│   │   │   │   ├── Charts/
+│   │   │   │   │   ├── PnLChart.jsx
+│   │   │   │   │   ├── WinLossChart.jsx
+│   │   │   │   │   └── DailyPerformance.jsx
+│   │   │   │   ├── RecentTrades.jsx
+│   │   │   │   ├── MarketOverview.jsx
+│   │   │   │   └── SystemHealth.jsx
+│   │   │   └── index.js
+│   │   │
+│   │   ├── admin/
+│   │   │   ├── pages/
+│   │   │   │   ├── UserManagement.jsx
+│   │   │   │   ├── CommissionRules.jsx
+│   │   │   │   ├── SystemSettings.jsx
+│   │   │   │   ├── AuditLogs.jsx
+│   │   │   │   └── Analytics.jsx
+│   │   │   ├── components/
+│   │   │   │   ├── UserTable.jsx
+│   │   │   │   ├── UserModal.jsx
+│   │   │   │   ├── CommissionTable.jsx
+│   │   │   │   └── AuditTable.jsx
+│   │   │   ├── services/
+│   │   │   │   ├── adminService.js
+│   │   │   │   └── auditService.js
+│   │   │   └── index.js
+│   │   │
+│   │   ├── notifications/
+│   │   │   ├── contexts/
+│   │   │   │   └── NotificationContext.jsx
+│   │   │   ├── hooks/
+│   │   │   │   ├── useNotifications.js
+│   │   │   │   └── useToast.js
+│   │   │   ├── pages/
+│   │   │   │   └── NotificationCenter.jsx
+│   │   │   ├── components/
+│   │   │   │   ├── NotificationBell.jsx
+│   │   │   │   ├── NotificationList.jsx
+│   │   │   │   ├── NotificationToast.jsx
+│   │   │   │   └── Toast.jsx
+│   │   │   ├── services/
+│   │   │   │   └── notificationService.js
+│   │   │   └── index.js
+│   │   │
+│   │   ├── settings/
+│   │   │   ├── pages/
+│   │   │   │   ├── ProfileSettings.jsx
+│   │   │   │   ├── TradingSettings.jsx
+│   │   │   │   ├── RiskSettings.jsx
+│   │   │   │   └── BillingSettings.jsx
+│   │   │   ├── components/
+│   │   │   │   ├── ProfileForm.jsx
+│   │   │   │   ├── TradingPreferences.jsx
+│   │   │   │   ├── RiskLimits.jsx
+│   │   │   │   └── BillingInfo.jsx
+│   │   │   ├── services/
+│   │   │   │   └── settingsService.js
+│   │   │   └── index.js
+│   │   │
+│   │   └── referrals/
+│   │       ├── pages/
+│   │       │   ├── ReferralDashboard.jsx
+│   │       │   └── ReferralStats.jsx
+│   │       ├── components/
+│   │       │   ├── ReferralLink.jsx
+│   │       │   ├── CommissionTable.jsx
+│   │       │   └── StatsCards.jsx
+│   │       ├── services/
+│   │       │   └── referralService.js
+│   │       └── index.js
+│   │
+│   ├── shared/                         # Shared across features
+│   │   ├── components/
+│   │   │   ├── layout/
+│   │   │   │   ├── AppLayout.jsx       # Main wrapper: Navbar + Sidebar + Content
+│   │   │   │   ├── Navbar.jsx
+│   │   │   │   ├── Sidebar.jsx
+│   │   │   │   ├── Footer.jsx
+│   │   │   │   └── ProtectedRoute.jsx
+│   │   │   ├── ui/                    # Reusable UI components
+│   │   │   │   ├── buttons/
+│   │   │   │   │   ├── Button.jsx
+│   │   │   │   │   ├── IconButton.jsx
+│   │   │   │   │   └── TradeButton.jsx
+│   │   │   │   ├── inputs/
+│   │   │   │   │   ├── Input.jsx
+│   │   │   │   │   ├── Select.jsx
+│   │   │   │   │   ├── Textarea.jsx
+│   │   │   │   │   ├── Checkbox.jsx
+│   │   │   │   │   ├── Radio.jsx
+│   │   │   │   │   └── Slider.jsx
+│   │   │   │   ├── cards/
+│   │   │   │   │   ├── Card.jsx
+│   │   │   │   │   ├── CardHeader.jsx
+│   │   │   │   │   └── CardBody.jsx
+│   │   │   │   ├── dialogs/
+│   │   │   │   │   ├── Modal.jsx
+│   │   │   │   │   ├── Dialog.jsx
+│   │   │   │   │   ├── Drawer.jsx
+│   │   │   │   │   └── ConfirmDialog.jsx
+│   │   │   │   ├── feedback/
+│   │   │   │   │   ├── Toast.jsx
+│   │   │   │   │   ├── Loader.jsx
+│   │   │   │   │   ├── Spinner.jsx
+│   │   │   │   │   └── Progress.jsx
+│   │   │   │   ├── data/
+│   │   │   │   │   ├── Table.jsx
+│   │   │   │   │   ├── Pagination.jsx
+│   │   │   │   │   ├── DataGrid.jsx
+│   │   │   │   │   └── SearchBar.jsx
+│   │   │   │   └── misc/
+│   │   │   │       ├── Badge.jsx
+│   │   │   │       ├── Tooltip.jsx
+│   │   │   │       ├── Tabs.jsx
+│   │   │   │       ├── Tag.jsx
+│   │   │   │       └── Empty.jsx
+│   │   │   └── hooks/                 # Shared hook utilities
+│   │   │       ├── useResponsive.js
+│   │   │       ├── useLocalStorage.js
+│   │   │       ├── useAsync.js
+│   │   │       ├── usePagination.js
+│   │   │       ├── useDebounce.js
+│   │   │       └── useThrottle.js
+│   │   └── styles/                    # Global styles
+│   │       ├── tailwind.css
+│   │       ├── animations.css
+│   │       ├── variables.css
+│   │       └── theme.js
+│   │
+│   ├── providers/                      # Context/Provider setup
+│   │   ├── RootProvider.jsx            # Wraps all providers
+│   │   ├── AuthProvider.jsx
+│   │   ├── TradingProvider.jsx
+│   │   ├── NotificationProvider.jsx
+│   │   ├── WSProvider.jsx
+│   │   ├── ThemeProvider.jsx
+│   │   └── QueryProvider.jsx           # React Query (optional but recommended)
+│   │
+│   ├── hooks/                          # Global hooks (cross-feature)
+│   │   ├── useWebSocket.js
+│   │   ├── useApi.js
+│   │   ├── useMutation.js
+│   │   └── useQuery.js
+│   │
+│   ├── router/
+│   │   ├── index.js                    # Route definitions
+│   │   ├── routes.jsx                  # Route components
+│   │   └── routeGuards.js              # Auth/permission checks
+│   │
+│   └── App.jsx
+│
+├── docker-compose.frontend.yml
+├── Dockerfile
+├── .dockerignore
+├── README.md
+└── .gitignore
+
+
+
+
+
+
+
+
+
+backend/
+├── fastapi_app/                         # Real-time, trading, async layer
+│   ├── __init__.py
+│   ├── main.py                          # FastAPI app entrypoint
+│   ├── asgi.py                          # ASGI server (uvicorn/gunicorn)
+│   ├── deps.py                          # Shared FastAPI dependencies
+│   ├── config.py                        # Runtime config (env + DB overrides)
+│   │
+│   ├── oauth/                           # Deriv OAuth (NO API KEYS)
+│   │   ├── __init__.py
+│   │   ├── routes.py                    # /login, /callback
+│   │   ├── deriv_oauth.py               # OAuth helpers, token exchange
+│   │   ├── referral.py                  # Force referral link usage
+│   │   └── schemas.py                   # OAuth request/response schemas
+│   │
+│   ├── deriv_ws/                        # Deriv WebSocket layer
+│   │   ├── __init__.py
+│   │   ├── client.py                    # WS authorize + subscribe
+│   │   ├── connection_pool.py           # One WS per user/session
+│   │   ├── handlers.py                  # balance, ticks, proposals
+│   │   ├── events.py                    # event names/constants
+│   │   └── serializers.py               # WS → internal data mapping
+│   │
+│   ├── trading_engine/                  # Binary trading brain
+│   │   ├── __init__.py
+│   │   ├── engine.py                    # Trade execution lifecycle
+│   │   ├── selector.py                  # Strategy selector (market regime)
+|   |   ├── signal_consensus.py          # ≥ 2 signals agreement - Combined confidence ≥ 0.70
+│   │   ├── risk_manager.py              # stake sizing ≥0.35$, limits, recovery(Fibonacci > Martingale)
+│   │   ├── commission.py                # apply commission before execution (idempotent)
+│   │   │
+│   │   ├── strategies/
+│   │   │   ├── __init__.py
+│   │   │   ├── base.py                  # BaseBinaryStrategy
+│   │   │   ├── scalping.py              # Tick/short-duration strategy
+│   │   │   ├── momentum.py              # Volatility/trend logic
+│   │   │   └── breakout.py              # Breakout logic
+│   │
+│   ├── api/                             # REST API exposed to frontend
+│   │   ├── __init__.py
+│   │   ├── routes.py                   # router aggregator
+│   │   ├── auth.py                     # session, jwt, oauth state
+│   │   ├── users.py                    # platform users
+│   │   ├── accounts.py                 # Deriv real/demo accounts
+│   │   ├── trades.py                   # trade history
+│   │   └── notifications.py            # in-app notifications
+│   │
+│   └── middleware/
+│       ├── __init__.py
+│       ├── auth.py                     # auth enforcement
+│       └── logging.py                  # structured logs
+│
+├── django_core/                         # Business logic + persistence
+│   ├── manage.py
+│   │
+│   ├── config/
+│   │   ├── __init__.py
+│   │   ├── urls.py
+│   │   ├── asgi.py
+│   │   ├── wsgi.py
+│   │   └── settings/
+│   │       ├── __init__.py
+│   │       ├── base.py                  # shared settings
+│   │       ├── dev.py                   # development
+│   │       └── prod.py                  # production
+│   │
+│   ├── users/                          # Platform users
+│   │   ├── __init__.py
+│   │   ├── admin.py
+│   │   ├── apps.py
+│   │   ├── models.py                   # User model
+│   │   ├── serializers.py
+│   │   ├── services.py                 # create/update users
+│   │   ├── signals.py                  # auto profile creation
+│   │   ├── urls.py
+│   │   └── migrations/
+│   │
+│   ├── accounts/                       # Deriv accounts
+│   │   ├── __init__.py
+│   │   ├── admin.py
+│   │   ├── apps.py
+│   │   ├── models.py                   # real/demo accounts
+│   │   ├── selectors.py                # read logic
+│   │   ├── serializers.py
+│   │   ├── signals.py                  # sync balances
+│   │   └── migrations/
+│   │
+│   ├── trades/
+│   │   ├── __init__.py
+│   │   ├── models.py        # Trade, TradeExecution, TradeOutcome
+│   │   ├── admin.py         # admin filters, P/L summaries
+│   │   ├── services.py     # create_trade(), close_trade()
+│   │   ├── selectors.py    # get_user_trades(), stats
+|   │   ├── serializers.py
+│   │   └── migrations/
+│   │
+│   ├── billing/                        # Money tracking
+│   │   ├── __init__.py
+│   │   ├── admin.py
+│   │   ├── apps.py
+│   │   ├── models.py                   # balances, payouts
+│   │   ├── services.py                 # payout logic
+│   │   ├── serializers.py
+│   │   └── migrations/
+│   │
+│   ├── commission/                     # Renamed from markups
+│   │   ├── __init__.py
+│   │   ├── admin.py
+│   │   ├── apps.py
+│   │   ├── models.py                   # commission rules
+│   │   ├── services.py                 # calculate commission
+│   │   ├── serializers.py
+│   │   └── migrations/
+│   │
+│   ├── referrals/                      # Deriv referral tracking
+│   │   ├── __init__.py
+│   │   ├── admin.py
+│   │   ├── apps.py
+│   │   ├── models.py                   # referral codes, stats
+│   │   ├── services.py
+│   │   ├── serializers.py
+│   │   └── migrations/
+│   │
+│   ├── notifications/                  # In-app notifications
+│   │   ├── __init__.py
+│   │   ├── admin.py
+│   │   ├── apps.py
+│   │   ├── models.py                   # Notification model
+│   │   ├── services.py                 # create/mark read
+│   │   ├── serializers.py
+│   │   ├── signals.py                  # trade → notify
+│   │   └── migrations/
+│   ├── audit/                          # Audit logs for critical actions
+│   │   ├── __init__.py
+│   │   ├── admin.py
+│   │   ├── apps.py
+│   │   ├── models.py                   # Audit log model
+│   │   ├── services.py                 # create log entry
+│   │   ├── serializers.py              # audit serializers
+│   │   ├── signals.py                  
+│   │   └── migrations/
+│   │
+│   └── admin.py                        # global admin tweaks
+│
+├── shared/                             # Shared infrastructure
+│   ├── __init__.py
+│   │
+│   ├── database/
+│   │   ├── __init__.py
+│   │   └── django.py                   # django.setup() for FastAPI
+│   │
+│   ├── settings/
+│   │   ├── __init__.py
+│   │   └── env.py                      # secrets ONLY (OAuth, WS)
+│   │
+│   └── utils/
+│       ├── __init__.py
+│       ├── logger.py
+│       ├── time.py
+│       └── ids.py
+│
+├── requirements/
+│   ├── base.txt
+│   ├── dev.txt
+│   └── prod.txt
+├── venv/
+│
+├── .env
+├── .env.example
+├── .gitignore
+├── docker-compose.yml
+├── README.md
+└── Makefile

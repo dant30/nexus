@@ -1,0 +1,47 @@
+# Base Requirements - Common to all environments
+
+# Django
+Django==4.2.10
+djangorestframework==3.14.0
+django-filter==23.5
+django-cors-headers==4.3.1
+
+# FastAPI
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.6
+websockets==12.0
+httpx==0.25.2
+
+# Database
+psycopg2-binary==2.9.9
+
+# Authentication & Tokens
+djangorestframework-simplejwt>=5.3.1,<6.0
+
+# Caching & Async
+redis==5.0.1
+django-redis==5.4.0
+celery==5.3.4
+
+# Environment Configuration
+python-dotenv==1.0.0
+
+# Utilities
+python-dateutil==2.8.2
+pytz==2023.3
+
+# API Documentation
+drf-spectacular==0.26.5
+
+# Validation
+pydantic==2.5.2
+email-validator>=2.0
+
+# pydantic>=2.5,<2.7
+# pydantic-core>=2.14,<2.18
+
+# UUID
+shortuuid==1.0.11

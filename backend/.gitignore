@@ -1,0 +1,150 @@
+############################################
+# 🔐 ENVIRONMENT & SECRETS (NEVER COMMIT)
+############################################
+.env
+.env.*
+!.env.example
+
+# OAuth tokens, sessions, local overrides
+*.secret
+*.key
+*.pem
+
+############################################
+# 🐍 PYTHON
+############################################
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+.eggs/
+
+############################################
+# 🧪 VIRTUAL ENVIRONMENTS
+############################################
+venv/
+.venv/
+env/
+ENV/
+
+############################################
+# 📦 DEPENDENCY / BUILD ARTIFACTS
+############################################
+pip-wheel-metadata/
+*.whl
+*.manifest
+*.spec
+
+############################################
+# 🧠 DJANGO
+############################################
+# Static & media (generated)
+staticfiles/
+media/
+
+# Django local DB (if ever used)
+db.sqlite3
+*.sqlite3
+
+# Django logs
+logs/
+*.log
+
+############################################
+# ⚡ FASTAPI / ASGI
+############################################
+# Uvicorn / Gunicorn runtime
+uvicorn.log
+gunicorn.log
+
+# Runtime PID / sockets
+*.pid
+*.sock
+
+############################################
+# 📊 DATA / EXPORTS (TRADING, REPORTS)
+############################################
+data/
+exports/
+reports/
+backtests/
+*.csv
+*.parquet
+*.feather
+
+############################################
+# 🔄 CACHES & TEMP FILES
+############################################
+.cache/
+pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+############################################
+# 🧪 TEST COVERAGE
+############################################
+.coverage
+coverage.xml
+htmlcov/
+
+############################################
+# 🐳 DOCKER
+############################################
+# Local Docker volumes
+docker-data/
+docker-volumes/
+
+# Override files (local only)
+docker-compose.override.yml
+
+############################################
+# 🧠 IDE / EDITOR NOISE
+############################################
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-workspace
+*.sublime-project
+
+############################################
+# 🖥️ OS FILES
+############################################
+.DS_Store
+Thumbs.db
+desktop.ini
+
+############################################
+# 🧾 FASTAPI + DJANGO RUNTIME OUTPUT
+############################################
+# Compiled translations
+*.mo
+
+# Collected static hash files
+*.map
+
+############################################
+# 🔍 TYPE CHECKING / LINT
+############################################
+.pyright/
+.eslintcache
+
+############################################
+# 🔐 TRADE ENGINE / WS SAFETY
+############################################
+# NEVER commit runtime trading state
+sessions/
+connections/
+ws_dumps/
+runtime/
+
+############################################
+# 📜 BACKUPS
+############################################
+*.bak
+*.old
+*.backup
