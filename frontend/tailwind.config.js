@@ -1,9 +1,7 @@
-/** @type {import('tailwindcss').Config} */
+﻿/** @type {import('tailwindcss').Config} */
 export default {
-  content: [
-    "./index.html",
-    "./src/**/*.{js,jsx,ts,tsx}",
-  ],
+  content: ["./index.html", "./src/**/*.{js,jsx,ts,tsx}"],
+  darkMode: ["class"],
 
   theme: {
     extend: {
@@ -29,7 +27,8 @@ export default {
       },
 
       fontFamily: {
-        sans: ["Inter", "system-ui", "sans-serif"],
+        sans: ["Space Grotesk", "system-ui", "sans-serif"],
+        mono: ["JetBrains Mono", "ui-monospace", "SFMono-Regular", "monospace"],
       },
 
       boxShadow: {
