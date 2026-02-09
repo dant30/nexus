@@ -142,6 +142,14 @@ class DerivOAuthClient:
                 environment="render",
             )
             return None
+        
+        except asyncio.TimeoutError as e:
+            log_error(
+                "Deriv WebSocket timeout",
+                exception=e,
+                ws_url=ws_url,
+            )
+            return None
 
         # Fallback for everything else
         except Exception as e:
