@@ -1,6 +1,13 @@
-"""Environment configuration utilities."""
+﻿"""Environment configuration utilities."""
 import os
+from pathlib import Path
 from typing import List, Optional
+
+from dotenv import load_dotenv
+
+# Load .env from backend root if present
+ENV_PATH = Path(__file__).resolve().parents[2] / ".env"
+load_dotenv(ENV_PATH, override=False)
 
 
 class EnvConfig:

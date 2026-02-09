@@ -17,7 +17,7 @@ export const API_ENDPOINTS = {
     REFRESH: `${API_BASE_URL}/auth/refresh`,
     ME: `${API_BASE_URL}/auth/me`,
     CHANGE_PASSWORD: `${API_BASE_URL}/auth/change-password`,
-    OAUTH_AUTHORIZE: `${API_BASE_URL}/auth/oauth/authorize`,
+    OAUTH_AUTHORIZE: `${API_BASE_URL}/oauth/deriv/authorize`,
     OAUTH_CALLBACK: `${API_BASE_URL}/oauth/deriv/callback`,
   },
 

@@ -22,6 +22,7 @@ from fastapi_app.config import settings
 from fastapi_app.middleware.auth import JWTAuthMiddleware
 from fastapi_app.middleware.logging import LoggingMiddleware
 from fastapi_app.api import routes
+from fastapi_app.oauth import routes as oauth_routes
 
 logger = get_logger("fastapi")
 
@@ -40,25 +41,25 @@ async def lifespan(app: FastAPI):
     Startup and shutdown events for the FastAPI application.
     """
     # Startup
-    log_info("ðŸš€ FastAPI startup", service="nexus-trading")
+    log_info("Ã°Å¸Å¡â‚¬ FastAPI startup", service="nexus-trading")
     try:
         setup_django()
-        log_info("âœ… Django ORM initialized")
+        log_info("Ã¢Å“â€¦ Django ORM initialized")
     except Exception as e:
-        log_error("âŒ Django setup failed", exception=e)
+        log_error("Ã¢ÂÅ’ Django setup failed", exception=e)
         raise
     
     yield
     
     # Shutdown
-    log_info("ðŸ›‘ FastAPI shutdown", service="nexus-trading")
+    log_info("Ã°Å¸â€ºâ€˜ FastAPI shutdown", service="nexus-trading")
     try:
         # Close all WebSocket connections
         for connection in AppState.ws_connections.values():
             await connection.close()
-        log_info("âœ… WebSocket connections closed")
+        log_info("Ã¢Å“â€¦ WebSocket connections closed")
     except Exception as e:
-        log_error("âŒ Shutdown error", exception=e)
+        log_error("Ã¢ÂÅ’ Shutdown error", exception=e)
 
 
 # ============================================================================
@@ -183,6 +184,7 @@ app.include_router(routes.accounts_router, prefix="/api/v1/accounts", tags=["Acc
 app.include_router(routes.trades_router, prefix="/api/v1/trades", tags=["Trades"])
 app.include_router(routes.billing_router, prefix="/api/v1/billing", tags=["Billing"])
 app.include_router(routes.notifications_router, prefix="/api/v1/notifications", tags=["Notifications"])
+app.include_router(oauth_routes.router, prefix="/api/v1/oauth", tags=["OAuth"])
 
 
 # ============================================================================
