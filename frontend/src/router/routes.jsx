@@ -1,14 +1,40 @@
 import React from "react";
-import { LoginPage } from "../pages/LoginPage.jsx";
-import { DashboardPage } from "../pages/DashboardPage.jsx";
-import { TradingPage } from "../pages/TradingPage.jsx";
-import { OAuthCallbackPage } from "../pages/OAuthCallbackPage.jsx";
-import { OAuthConnectPage } from "../pages/OAuthConnectPage.jsx";
+import { Login } from "../features/auth/pages/Login.jsx";
+import { OAuthCallback } from "../features/auth/pages/OAuthCallback.jsx";
+import { OAuthRedirect } from "../features/auth/pages/OAuthRedirect.jsx";
+import { UserDashboard } from "../features/dashboard/pages/UserDashboard.jsx";
+import { TradingDashboard } from "../features/dashboard/pages/TradingDashboard.jsx";
+import { AdminDashboard } from "../features/dashboard/pages/AdminDashboard.jsx";
 
-export const routes = [
-  { path: "/login", element: <LoginPage /> },
-  { path: "/oauth/connect", element: <OAuthConnectPage /> },
-  { path: "/oauth/callback", element: <OAuthCallbackPage /> },
-  { path: "/dashboard", element: <DashboardPage /> },
-  { path: "/trade", element: <TradingPage /> }
+export const publicRoutes = [
+  { path: "/login", element: <Login /> },
+  { path: "/oauth/redirect", element: <OAuthRedirect /> },
+  { path: "/oauth/callback", element: <OAuthCallback /> },
 ];
+
+export const protectedRoutes = [
+  {
+    path: "/dashboard",
+    label: "Overview",
+    meta: "Home",
+    element: <UserDashboard />,
+  },
+  {
+    path: "/dashboard/trading",
+    label: "Trading",
+    meta: "Live",
+    element: <TradingDashboard />,
+  },
+  {
+    path: "/dashboard/admin",
+    label: "Admin",
+    meta: "Ops",
+    element: <AdminDashboard />,
+  },
+];
+
+export const navigationRoutes = protectedRoutes.map(({ path, label, meta }) => ({
+  path,
+  label,
+  meta,
+}));

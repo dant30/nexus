@@ -1,14 +1,23 @@
-import React from "react";
+import React, { useState } from "react";
 import { useOAuth } from "../hooks/useOAuth.js";
 
 export function OAuthButton() {
   const { startOAuth } = useOAuth();
+  const [loading, setLoading] = useState(false);
+
+  const onClick = async () => {
+    setLoading(true);
+    await startOAuth();
+    setLoading(false);
+  };
+
   return (
     <button
-      onClick={startOAuth}
-      className="w-full bg-blue-600 hover:bg-blue-700 rounded py-2"
+      onClick={onClick}
+      className="w-full rounded-xl border border-white/15 px-4 py-3 text-sm font-semibold text-white/80 transition hover:border-white/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-70"
+      disabled={loading}
     >
-      Connect Deriv
+      {loading ? "Connecting..." : "Connect Deriv"}
     </button>
   );
 }

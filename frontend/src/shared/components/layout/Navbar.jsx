@@ -1,9 +1,44 @@
 import React from "react";
+import { Link } from "react-router-dom";
+import { useAuth } from "../../../features/auth/contexts/AuthContext.jsx";
+import { useAuthActions } from "../../../features/auth/hooks/useAuth.js";
 
 export function Navbar() {
+  const { user, isAuthenticated } = useAuth();
+  const { signOut } = useAuthActions();
+
   return (
-    <header className="px-6 py-4 bg-slate-800 border-b border-slate-700">
-      <h1 className="text-lg font-semibold">Nexus</h1>
+    <header className="border-b border-white/10 bg-slate/80 backdrop-blur">
+      <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
+        <div>
+          <p className="text-xs uppercase tracking-[0.3em] text-white/50">Nexus</p>
+          <Link to="/dashboard" className="text-lg font-semibold">
+            Trading Console
+          </Link>
+        </div>
+        <div className="flex items-center gap-3 text-sm">
+          {isAuthenticated ? (
+            <>
+              <span className="rounded-full border border-white/10 px-3 py-1 text-xs text-white/70">
+                {user?.username || user?.email || "Trader"}
+              </span>
+              <button
+                onClick={signOut}
+                className="rounded-full border border-white/10 px-4 py-2 text-xs text-white/80 transition hover:border-white/30"
+              >
+                Sign out
+              </button>
+            </>
+          ) : (
+            <Link
+              to="/login"
+              className="rounded-full border border-white/10 px-4 py-2 text-xs text-white/80 transition hover:border-white/30"
+            >
+              Sign in
+            </Link>
+          )}
+        </div>
+      </div>
     </header>
   );
 }

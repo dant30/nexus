@@ -1,1 +1,1 @@
-export { routes } from "./routes.jsx";
+export { publicRoutes, protectedRoutes, navigationRoutes } from "./routes.jsx";

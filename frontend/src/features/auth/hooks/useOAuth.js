@@ -1,10 +1,16 @@
-import { getOAuthUrl } from "../services/authService.js";
+import { useCallback } from "react";
+import { useAuth } from "../contexts/AuthContext.jsx";
 
 export const useOAuth = () => {
-  const startOAuth = async () => {
-    const { authorization_url } = await getOAuthUrl();
-    window.location.href = authorization_url;
-  };
+  const { beginOAuth } = useAuth();
+
+  const startOAuth = useCallback(async () => {
+    const result = await beginOAuth();
+    if (result.ok && result.url) {
+      window.location.assign(result.url);
+    }
+    return result;
+  }, [beginOAuth]);
 
   return { startOAuth };
 };

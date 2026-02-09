@@ -1,26 +1,26 @@
-import axios from "axios";
+import { apiClient } from "../../../core/api/client.js";
 import { API_ENDPOINTS } from "../../../core/constants/api.js";
-import { attachInterceptors } from "../../../core/api/interceptors.js";
-
-const client = axios.create();
-attachInterceptors(client);
 
 export const loginRequest = async (payload) => {
-  const { data } = await client.post(API_ENDPOINTS.AUTH.LOGIN, payload);
-  return data;
+  return apiClient.post(API_ENDPOINTS.AUTH.LOGIN, payload);
 };
 
 export const logoutRequest = async () => {
-  const { data } = await client.post(API_ENDPOINTS.AUTH.LOGOUT);
-  return data;
+  return apiClient.post(API_ENDPOINTS.AUTH.LOGOUT);
 };
 
 export const refreshRequest = async (payload) => {
-  const { data } = await client.post(API_ENDPOINTS.AUTH.REFRESH, payload);
-  return data;
+  return apiClient.post(API_ENDPOINTS.AUTH.REFRESH, payload);
 };
 
 export const getOAuthUrl = async () => {
-  const { data } = await client.get(`${API_ENDPOINTS.AUTH.LOGIN.replace("/login", "")}/oauth/deriv/authorize`);
-  return data;
+  return apiClient.get(API_ENDPOINTS.AUTH.OAUTH_AUTHORIZE);
+};
+
+export const handleOAuthCallback = async (payload) => {
+  return apiClient.post(API_ENDPOINTS.AUTH.OAUTH_CALLBACK, payload);
+};
+
+export const fetchMeRequest = async () => {
+  return apiClient.get(API_ENDPOINTS.AUTH.ME);
 };

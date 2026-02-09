@@ -1,19 +1,30 @@
+import { useCallback } from "react";
 import { useAuth } from "../contexts/AuthContext.jsx";
-import { loginRequest, logoutRequest } from "../services/authService.js";
 
 export const useAuthActions = () => {
-  const { login, logout } = useAuth();
+  const { login, logout, refreshSession, completeOAuth } = useAuth();
 
-  const signIn = async (username, password) => {
-    const res = await loginRequest({ username, password });
-    login(res);
-    return res;
-  };
+  const signIn = useCallback(
+    async (emailOrUsername, password) => {
+      return login({ username: emailOrUsername, password });
+    },
+    [login]
+  );
 
-  const signOut = async () => {
-    await logoutRequest();
-    logout();
-  };
+  const signOut = useCallback(async () => {
+    return logout();
+  }, [logout]);
 
-  return { signIn, signOut };
+  const refresh = useCallback(async () => {
+    return refreshSession();
+  }, [refreshSession]);
+
+  const finishOAuth = useCallback(
+    async (payload) => {
+      return completeOAuth(payload);
+    },
+    [completeOAuth]
+  );
+
+  return { signIn, signOut, refresh, finishOAuth };
 };
