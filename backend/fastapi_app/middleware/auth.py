@@ -11,6 +11,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from starlette.authentication import (
     AuthenticationBackend,
     AuthenticationError,
+    AuthCredentials,
     SimpleUser,
 )
 from starlette.middleware.authentication import AuthenticationMiddleware
@@ -65,7 +66,9 @@ class JWTAuthMiddleware(AuthenticationBackend):
                 return None
             
             # Create authenticated user
-            return SimpleUser(username=username or f"user_{user_id}")
+            return AuthCredentials(["authenticated"]), SimpleUser(
+                username=username or f"user_{user_id}"
+            )
             
         except jwt.ExpiredSignatureError:
             log_error("JWT token expired")
