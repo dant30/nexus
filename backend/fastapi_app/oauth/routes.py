@@ -31,6 +31,50 @@ class OAuthCallbackRequest(BaseModel):
     state: Optional[str] = None
 
 
+def _to_bool(value) -> Optional[bool]:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "y"}
+    return None
+
+
+def _infer_account_type(account: dict) -> str:
+    account_type = account.get("account_type")
+    if account_type:
+        return str(account_type).lower()
+    loginid = account.get("loginid") or account.get("account_id") or account.get("account")
+    is_virtual = _to_bool(account.get("is_virtual"))
+    if is_virtual is True or (isinstance(loginid, str) and loginid.startswith("VRT")):
+        return "virtual"
+    return "real"
+
+
+def _select_default_account(account_list: list) -> tuple[Optional[dict], list]:
+    if not account_list:
+        return None, []
+
+    normalized = []
+    types = []
+    for account in account_list:
+        account_type = _infer_account_type(account)
+        is_virtual = _to_bool(account.get("is_virtual"))
+        if is_virtual is None:
+            is_virtual = account_type == "virtual"
+        normalized.append({**account, "account_type": account_type, "is_virtual": is_virtual})
+        if account_type not in types:
+            types.append(account_type)
+
+    for account in normalized:
+        if account.get("is_virtual"):
+            return account, types
+    return normalized[0], types
+
+
 def _extract_oauth_payload(
     code: Optional[str],
     token: Optional[str],
@@ -69,29 +113,96 @@ async def _handle_oauth_callback(payload: OAuthCallbackRequest):
     user_info = await oauth_client.get_user_info(access_token)
 
     deriv_id = None
+    login_id = None
     email = None
     username = None
+    currency = payload.currency
+    full_name = None
+    first_name = None
+    last_name = None
+    email_verified = None
+    deriv_country = None
+    deriv_account_type = None
+    deriv_is_virtual = None
 
     if user_info:
-        deriv_id = user_info.get("id") or user_info.get("loginid")
+        deriv_id = user_info.get("user_id") or user_info.get("id")
+        login_id = user_info.get("loginid") or user_info.get("login_id")
         email = user_info.get("email")
-        username = user_info.get("username") or user_info.get("loginid")
+        currency = currency or user_info.get("currency")
+        full_name = user_info.get("fullname") or user_info.get("full_name") or user_info.get("name")
+        first_name = user_info.get("first_name")
+        last_name = user_info.get("last_name")
+        username = user_info.get("username") or login_id
+        email_verified = _to_bool(
+            user_info.get("is_email_verified")
+            or user_info.get("email_verified")
+        )
+        deriv_country = user_info.get("country")
+
+        account_list = user_info.get("account_list") or []
+        default_account, account_types = _select_default_account(account_list)
+        if default_account:
+            login_id = login_id or default_account.get("loginid")
+            currency = currency or default_account.get("currency")
+            deriv_is_virtual = default_account.get("is_virtual")
+
+        if account_types:
+            if "virtual" in account_types:
+                deriv_account_type = "virtual"
+                deriv_is_virtual = True if deriv_is_virtual is None else deriv_is_virtual
+            else:
+                deriv_account_type = account_types[0]
+            if len(account_types) > 1:
+                deriv_account_type = ",".join(account_types)
 
     if not username:
-        fallback_id = payload.account_id or deriv_id or "unknown"
+        fallback_id = payload.account_id or login_id or deriv_id or "unknown"
         username = f"deriv_{fallback_id}"
 
     if not email:
         email = f"{username}@deriv.local"
+
+    if full_name and (not first_name or not last_name):
+        parts = [part for part in str(full_name).strip().split(" ") if part]
+        if parts:
+            first_name = first_name or parts[0]
+            if len(parts) > 1:
+                last_name = last_name or " ".join(parts[1:])
 
     user, created = await sync_to_async(User.objects.get_or_create)(
         username=username,
         defaults={"email": email},
     )
 
-    if not created and email and user.email != email:
-        user.email = email
-        await sync_to_async(user.save)()
+    if not created:
+        if email and user.email != email:
+            user.email = email
+
+    # Map Deriv fields onto user profile
+    if deriv_id:
+        user.deriv_id = str(deriv_id)
+    if login_id:
+        user.deriv_login_id = str(login_id)
+    if currency:
+        user.deriv_currency = str(currency)
+    if full_name:
+        user.deriv_full_name = str(full_name)
+    if email_verified is not None:
+        user.deriv_email_verified = bool(email_verified)
+    if deriv_country:
+        user.deriv_country = str(deriv_country)
+    if deriv_account_type:
+        user.deriv_account_type = str(deriv_account_type)
+    if deriv_is_virtual is not None:
+        user.deriv_is_virtual = bool(deriv_is_virtual)
+
+    if first_name:
+        user.first_name = str(first_name)
+    if last_name:
+        user.last_name = str(last_name)
+
+    await sync_to_async(user.save)()
 
     # Generate JWT tokens
     access_jwt = TokenManager.create_token(user.id, user.username)
@@ -113,6 +224,16 @@ async def _handle_oauth_callback(payload: OAuthCallbackRequest):
             "id": user.id,
             "username": user.username,
             "email": user.email,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "deriv_id": user.deriv_id,
+            "deriv_login_id": user.deriv_login_id,
+            "deriv_currency": user.deriv_currency,
+            "deriv_full_name": user.deriv_full_name,
+            "deriv_email_verified": user.deriv_email_verified,
+            "deriv_country": user.deriv_country,
+            "deriv_account_type": user.deriv_account_type,
+            "deriv_is_virtual": user.deriv_is_virtual,
         },
     }
 

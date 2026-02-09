@@ -6,6 +6,16 @@ import { useAuthActions } from "../../../features/auth/hooks/useAuth.js";
 export function Navbar() {
   const { user, isAuthenticated } = useAuth();
   const { signOut } = useAuthActions();
+  const accountLabel =
+    user?.deriv_is_virtual === true
+      ? "Virtual"
+      : user?.deriv_is_virtual === false
+      ? "Real"
+      : user?.deriv_account_type?.toString().includes("virtual")
+      ? "Virtual"
+      : user?.deriv_account_type
+      ? user.deriv_account_type
+      : "Virtual";
 
   return (
     <header className="border-b border-white/10 bg-slate/80 backdrop-blur">
@@ -21,6 +31,9 @@ export function Navbar() {
             <>
               <span className="rounded-full border border-white/10 px-3 py-1 text-xs text-white/70">
                 {user?.username || user?.email || "Trader"}
+              </span>
+              <span className="rounded-full border border-white/10 px-3 py-1 text-xs text-white/70">
+                {accountLabel}
               </span>
               <button
                 onClick={signOut}

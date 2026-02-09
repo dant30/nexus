@@ -9,3 +9,13 @@ export const listAccounts = async () => {
   const { data } = await client.get(API_ENDPOINTS.ACCOUNTS.LIST);
   return data;
 };
+
+export const getDefaultAccount = async () => {
+  const { data } = await client.get(API_ENDPOINTS.ACCOUNTS.DEFAULT);
+  return data;
+};
+
+export const getAccountBalance = async (accountId) => {
+  const { data } = await client.get(API_ENDPOINTS.ACCOUNTS.BALANCE(accountId));
+  return data;
+};

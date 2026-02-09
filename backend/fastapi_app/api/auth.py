@@ -299,6 +299,14 @@ async def get_current_user_profile(current_user: CurrentUser = Depends(get_curre
             "affiliate_code": getattr(user, "affiliate_code", None),
             "markup_percentage": float(getattr(user, "markup_percentage", 0)),
             "created_at": user.created_at.isoformat() if hasattr(user, "created_at") else None,
+            "deriv_id": getattr(user, "deriv_id", None),
+            "deriv_login_id": getattr(user, "deriv_login_id", None),
+            "deriv_currency": getattr(user, "deriv_currency", None),
+            "deriv_full_name": getattr(user, "deriv_full_name", None),
+            "deriv_email_verified": getattr(user, "deriv_email_verified", False),
+            "deriv_country": getattr(user, "deriv_country", None),
+            "deriv_account_type": getattr(user, "deriv_account_type", None),
+            "deriv_is_virtual": getattr(user, "deriv_is_virtual", False),
         }
         
     except User.DoesNotExist:
