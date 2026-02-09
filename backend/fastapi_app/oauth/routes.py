@@ -22,7 +22,10 @@ router = APIRouter(tags=["OAuth"])
 
 class OAuthCallbackRequest(BaseModel):
     """OAuth callback request."""
-    code: str
+    code: Optional[str] = None
+    token: Optional[str] = None
+    account_id: Optional[str] = None
+    currency: Optional[str] = None
     state: Optional[str] = None
 
 
@@ -57,41 +60,51 @@ async def deriv_oauth_callback(request: OAuthCallbackRequest):
     """
     try:
         oauth_client = DerivOAuthClient()
-        
-        # Exchange code for token
-        token_data = await oauth_client.exchange_code(request.code)
-        
-        if not token_data:
+
+        access_token = None
+        if request.code:
+            token_data = await oauth_client.exchange_code(request.code)
+            if not token_data:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Unable to exchange authorization code",
+                )
+            access_token = token_data.get("access_token")
+        elif request.token:
+            access_token = request.token
+        else:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Unable to exchange authorization code",
+                detail="Missing authorization code or token",
             )
-        
-        access_token = token_data.get("access_token")
-        
-        # Get user info from Deriv
+
+        # Get user info from Deriv (best effort)
         user_info = await oauth_client.get_user_info(access_token)
-        
-        if not user_info:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Unable to fetch user information",
-            )
-        
-        # Create or update user
-        deriv_id = user_info.get("id")
-        email = user_info.get("email")
-        username = user_info.get("username", f"deriv_{deriv_id}")
+
+        deriv_id = None
+        email = None
+        username = None
+
+        if user_info:
+            deriv_id = user_info.get("id") or user_info.get("loginid")
+            email = user_info.get("email")
+            username = user_info.get("username") or user_info.get("loginid")
+
+        if not username:
+            fallback_id = request.account_id or deriv_id or "unknown"
+            username = f"deriv_{fallback_id}"
+
+        if not email:
+            email = f"{username}@deriv.local"
         
         user, created = User.objects.get_or_create(
             username=username,
-            defaults={
-                "email": email,
-            },
+            defaults={"email": email},
         )
         
         if not created:
-            user.email = email
+            if email and user.email != email:
+                user.email = email
             user.save()
         
         # Generate JWT tokens

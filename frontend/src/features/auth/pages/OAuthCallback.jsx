@@ -12,13 +12,20 @@ export function OAuthCallback() {
       const params = new URLSearchParams(window.location.search);
       const code = params.get("code");
       const state = params.get("state") || "nexus";
+      const token = params.get("token1") || params.get("token");
+      const accountId = params.get("acct1") || params.get("account_id");
+      const currency = params.get("cur1") || params.get("currency");
 
-      if (!code) {
-        setStatus("Missing authorization code. Please retry.");
+      if (!code && !token) {
+        setStatus("Missing authorization response. Please retry.");
         return;
       }
 
-      const result = await finishOAuth({ code, state });
+      const payload = code
+        ? { code, state }
+        : { token, account_id: accountId, currency, state };
+
+      const result = await finishOAuth(payload);
       if (result.ok) {
         navigate("/dashboard", { replace: true });
       } else {
