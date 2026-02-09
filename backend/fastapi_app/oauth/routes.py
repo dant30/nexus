@@ -4,8 +4,8 @@ OAuth integration routes for Deriv.
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Request, status
-from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
+from asgiref.sync import sync_to_async
 
 import django
 django.setup()
@@ -84,15 +84,14 @@ async def _handle_oauth_callback(payload: OAuthCallbackRequest):
     if not email:
         email = f"{username}@deriv.local"
 
-    user, created = User.objects.get_or_create(
+    user, created = await sync_to_async(User.objects.get_or_create)(
         username=username,
         defaults={"email": email},
     )
 
-    if not created:
-        if email and user.email != email:
-            user.email = email
-        user.save()
+    if not created and email and user.email != email:
+        user.email = email
+        await sync_to_async(user.save)()
 
     # Generate JWT tokens
     access_jwt = TokenManager.create_token(user.id, user.username)
@@ -171,18 +170,16 @@ async def deriv_oauth_callback_get(
     cur1: Optional[str] = None,
 ):
     """
-    Handle Deriv OAuth callback via GET (for providers that redirect with query params).
-    Redirect browser to frontend callback page preserving query string so frontend handles the exchange.
+    Handle Deriv OAuth callback via GET (query params).
     """
     try:
-        # If you want backend to handle exchange server-side instead, call _handle_oauth_callback here.
-        frontend_callback = getattr(settings, "DERIV_OAUTH_CALLBACK_URL", "http://localhost:5173/oauth/callback")
-        query = request.url.query
-        redirect_url = f"{frontend_callback}?{query}" if query else frontend_callback
-
-        log_info("Redirecting OAuth GET callback to frontend", redirect_url=redirect_url)
-        return RedirectResponse(url=redirect_url, status_code=302)
-
+        payload = _extract_oauth_payload(
+            code=code,
+            token=token1 or token,
+            account_id=acct1 or account_id,
+            currency=cur1 or currency,
+        )
+        return await _handle_oauth_callback(payload)
     except HTTPException:
         raise
     except Exception as e:
