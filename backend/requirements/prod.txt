@@ -22,3 +22,6 @@ cryptography==41.0.7
 
 # Environment
 whitenoise==6.6.0
+
+django_extensions==3.2.0
+
