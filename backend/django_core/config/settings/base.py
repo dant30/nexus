@@ -91,20 +91,24 @@ WSGI_APPLICATION = "django_core.config.wsgi.application"
 DATABASE_URL = env.get("DATABASE_URL")
 if DATABASE_URL:
     DATABASES = {
-        "default": dj_database_url.parse(DATABASE_URL, conn_max_age=600),
+        "default": dj_database_url.config(
+            default=DATABASE_URL,
+            conn_max_age=600,
+            ssl_require=True,
+        )
     }
 else:
     DATABASES = {
         "default": {
-            "ENGINE": env.get("DB_ENGINE", "django.db.backends.postgresql"),
+            "ENGINE": "django.db.backends.postgresql",
             "NAME": env.get("DB_NAME", "nexus_db"),
             "USER": env.get("DB_USER", "postgres"),
             "PASSWORD": env.get("DB_PASSWORD", "postgres"),
             "HOST": env.get("DB_HOST", "localhost"),
             "PORT": env.get_int("DB_PORT", 5432),
-            "ATOMIC_REQUESTS": True,
         }
     }
+
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
