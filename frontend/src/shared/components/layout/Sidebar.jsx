@@ -12,8 +12,18 @@ const getLinkClass = ({ isActive }) =>
   ].join(" ");
 
 export function Sidebar() {
-  const { balance, currency, accountType, loading } = useBalance();
-  const accountLabel = accountType?.toString().includes("virtual") ? "Virtual" : "Real";
+  const { balance, currency, accountType, accountId, loading, status } = useBalance();
+  const accountLabel = accountType || "Account";
+  const balanceLabel =
+    balance === null || balance === undefined ? "—" : `${balance} ${currency || ""}`.trim();
+  const subLabel =
+    status === "unavailable"
+      ? "Account service unavailable"
+      : status === "empty"
+      ? "No account linked"
+      : loading
+      ? "Updating..."
+      : "Live";
 
   return (
     <aside className="w-64 shrink-0 rounded-2xl border border-white/10 bg-white/5 p-4 shadow-soft">
@@ -21,12 +31,11 @@ export function Sidebar() {
         <p className="text-xs uppercase tracking-[0.3em] text-white/50">Balance</p>
         <div className="mt-3 flex items-end justify-between">
           <div>
-            <p className="text-2xl font-semibold">
-              {balance} <span className="text-sm text-white/60">{currency}</span>
-            </p>
-            <p className="mt-1 text-xs text-white/50">
-              {loading ? "Updating..." : "Live"}
-            </p>
+            <p className="text-2xl font-semibold">{balanceLabel}</p>
+            <p className="mt-1 text-xs text-white/50">{subLabel}</p>
+            {accountId && (
+              <p className="mt-1 text-xs text-white/40">Account {accountId}</p>
+            )}
           </div>
           <span className="rounded-full border border-white/10 px-3 py-1 text-xs text-white/70">
             {accountLabel}

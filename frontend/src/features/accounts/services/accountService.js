@@ -19,3 +19,13 @@ export const getAccountBalance = async (accountId) => {
   const { data } = await client.get(API_ENDPOINTS.ACCOUNTS.BALANCE(accountId));
   return data;
 };
+
+export const getLiveBalance = async (accountId) => {
+  const { data } = await client.get(`${API_ENDPOINTS.ACCOUNTS.BALANCE(accountId)}/live`);
+  return data;
+};
+
+export const setDefaultAccount = async (accountId) => {
+  const { data } = await client.put(API_ENDPOINTS.ACCOUNTS.SET_DEFAULT(accountId));
+  return data;
+};

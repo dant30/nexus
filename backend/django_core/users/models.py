@@ -29,6 +29,8 @@ class User(AbstractUser):
 	deriv_country = models.CharField(max_length=8, blank=True, null=True)
 	deriv_account_type = models.CharField(max_length=32, blank=True, null=True)
 	deriv_is_virtual = models.BooleanField(default=False)
+	deriv_accounts = models.JSONField(default=list, blank=True)
+	deriv_access_token = models.TextField(blank=True, null=True)
 
 	created_at = models.DateTimeField(default=timezone.now)
 	updated_at = models.DateTimeField(auto_now=True)

@@ -16,6 +16,7 @@ from django_core.accounts.models import Account
 from django_core.accounts.selectors import get_user_accounts, get_default_account
 from django_core.accounts.services import create_demo_account, create_or_update_real_account
 from fastapi_app.deps import get_current_user, CurrentUser
+from fastapi_app.oauth.deriv_oauth import DerivOAuthClient
 from shared.utils.logger import log_info, log_error, get_logger
 
 logger = get_logger("accounts")
@@ -232,4 +233,54 @@ async def get_account_balance(
         raise HTTPException(status_code=404, detail="Account not found")
     except Exception as e:
         log_error("Failed to fetch balance", exception=e)
+        raise HTTPException(status_code=500, detail="Server error")
+
+
+@router.get("/{account_id}/balance/live")
+async def get_account_balance_live(
+    account_id: int,
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Get live balance from Deriv using stored token."""
+    try:
+        user = User.objects.get(id=current_user.user_id)
+        account = Account.objects.get(id=account_id, user_id=current_user.user_id)
+
+        token = None
+        if account.metadata:
+            token = account.metadata.get("token")
+        if not token:
+            token = getattr(user, "deriv_access_token", None)
+        if not token:
+            raise HTTPException(status_code=400, detail="Missing Deriv access token")
+
+        oauth_client = DerivOAuthClient()
+        balance_data = await oauth_client.get_balance(token)
+        if not balance_data:
+            raise HTTPException(status_code=502, detail="Failed to fetch live balance")
+
+        balance_value = balance_data.get("balance")
+        balance_currency = balance_data.get("currency") or account.currency
+
+        if balance_value is not None:
+            account.balance = Decimal(str(balance_value))
+            account.currency = str(balance_currency)
+            account.save(update_fields=["balance", "currency", "updated_at"])
+
+        return {
+            "account_id": account.id,
+            "balance": str(account.balance),
+            "currency": account.currency,
+            "updated_at": account.updated_at.isoformat(),
+            "source": "deriv",
+        }
+
+    except Account.DoesNotExist:
+        raise HTTPException(status_code=404, detail="Account not found")
+    except User.DoesNotExist:
+        raise HTTPException(status_code=404, detail="User not found")
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_error("Failed to fetch live balance", exception=e)
         raise HTTPException(status_code=500, detail="Server error")

@@ -1,7 +1,7 @@
 """
 OAuth integration routes for Deriv.
 """
-from typing import Optional
+from typing import Optional, List
 
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel
@@ -31,6 +31,7 @@ class OAuthCallbackRequest(BaseModel):
     account_id: Optional[str] = None
     currency: Optional[str] = None
     state: Optional[str] = None
+    accounts: Optional[List[dict]] = None
 
 
 def _to_bool(value) -> Optional[bool]:
@@ -94,12 +95,14 @@ def _extract_oauth_payload(
     token: Optional[str],
     account_id: Optional[str],
     currency: Optional[str],
+    accounts: Optional[List[dict]] = None,
 ) -> OAuthCallbackRequest:
     return OAuthCallbackRequest(
         code=code,
         token=token,
         account_id=account_id,
         currency=currency,
+        accounts=accounts,
     )
 
 
@@ -225,6 +228,7 @@ async def _handle_oauth_callback(payload: OAuthCallbackRequest):
 
     # Sync Deriv accounts into local accounts table
     account_list = user_info.get("account_list") if user_info else []
+    payload_accounts = payload.accounts or []
     if account_list:
         await sync_to_async(Account.objects.filter(user=user, is_default=True).update)(is_default=False)
 
@@ -233,6 +237,12 @@ async def _handle_oauth_callback(payload: OAuthCallbackRequest):
             account_login_id = account.get("loginid") or account.get("account_id")
             if not account_login_id:
                 continue
+
+            token_match = next(
+                (acc for acc in payload_accounts if str(acc.get("account_id")) == str(account_login_id)),
+                None,
+            )
+            account_token = token_match.get("token") if token_match else None
 
             is_virtual = _to_bool(account.get("is_virtual"))
             if is_virtual is None:
@@ -258,7 +268,10 @@ async def _handle_oauth_callback(payload: OAuthCallbackRequest):
                     "account_type": account_type,
                     "currency": str(account_currency),
                     "balance": Decimal(str(account_balance)),
-                    "metadata": account or {},
+                    "metadata": {
+                        **(account or {}),
+                        "token": account_token,
+                    },
                     "is_default": is_default,
                     "markup_percentage": getattr(user, "markup_percentage", 0),
                 },
@@ -271,6 +284,29 @@ async def _handle_oauth_callback(payload: OAuthCallbackRequest):
                 await sync_to_async(Account.objects.filter(user=user, deriv_account_id=str(fallback_login_id)).update)(
                     is_default=True
                 )
+
+    # Store full account list + tokens on user
+    if account_list or payload_accounts:
+        merged_accounts = []
+        for account in account_list:
+            account_login_id = account.get("loginid") or account.get("account_id")
+            token_match = next(
+                (acc for acc in payload_accounts if str(acc.get("account_id")) == str(account_login_id)),
+                None,
+            )
+            merged_accounts.append(
+                {
+                    **(account or {}),
+                    "account_id": account_login_id,
+                    "token": token_match.get("token") if token_match else None,
+                }
+            )
+        if not merged_accounts:
+            merged_accounts = payload_accounts
+        user.deriv_accounts = merged_accounts
+
+    if access_token:
+        user.deriv_access_token = access_token
 
     # Generate JWT tokens
     access_jwt = TokenManager.create_token(user.id, user.username)
@@ -357,16 +393,25 @@ async def deriv_oauth_callback_get(
     token1: Optional[str] = None,
     currency: Optional[str] = None,
     cur1: Optional[str] = None,
+    acct2: Optional[str] = None,
+    token2: Optional[str] = None,
+    cur2: Optional[str] = None,
 ):
     """
     Handle Deriv OAuth callback via GET (query params).
     """
     try:
+        accounts = []
+        if acct1 and token1:
+            accounts.append({"account_id": acct1, "token": token1, "currency": cur1})
+        if acct2 and token2:
+            accounts.append({"account_id": acct2, "token": token2, "currency": cur2})
         payload = _extract_oauth_payload(
             code=code,
             token=token1 or token,
             account_id=acct1 or account_id,
             currency=cur1 or currency,
+            accounts=accounts or None,
         )
         return await _handle_oauth_callback(payload)
     except HTTPException:

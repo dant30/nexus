@@ -2,8 +2,10 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 import { useAuth } from "../../auth/contexts/AuthContext.jsx";
 import {
   getAccountBalance,
+  getLiveBalance,
   getDefaultAccount,
   listAccounts,
+  setDefaultAccount,
 } from "../services/accountService.js";
 
 const AccountContext = createContext(null);
@@ -12,6 +14,7 @@ export function AccountProvider({ children }) {
   const [accounts, setAccounts] = useState([]);
   const [activeAccount, setActiveAccount] = useState(null);
   const [balanceLoading, setBalanceLoading] = useState(false);
+  const [switching, setSwitching] = useState(false);
   const { isAuthenticated } = useAuth();
 
   useEffect(() => {
@@ -57,7 +60,9 @@ export function AccountProvider({ children }) {
       if (!activeAccount?.id || !isAuthenticated) return;
       setBalanceLoading(true);
       try {
-        const data = await getAccountBalance(activeAccount.id);
+        const data = await getLiveBalance(activeAccount.id).catch(() =>
+          getAccountBalance(activeAccount.id)
+        );
         if (!mounted) return;
         setActiveAccount((prev) =>
           prev ? { ...prev, balance: data.balance, currency: data.currency } : prev
@@ -80,6 +85,22 @@ export function AccountProvider({ children }) {
     };
   }, [isAuthenticated, activeAccount?.id]);
 
+  const switchAccount = async (accountId) => {
+    const nextAccount = accounts.find((acc) => acc.id === Number(accountId));
+    if (!nextAccount) return;
+
+    setSwitching(true);
+    try {
+      await setDefaultAccount(nextAccount.id);
+      setAccounts((prev) =>
+        prev.map((acc) => ({ ...acc, is_default: acc.id === nextAccount.id }))
+      );
+      setActiveAccount(nextAccount);
+    } finally {
+      setSwitching(false);
+    }
+  };
+
   return (
     <AccountContext.Provider
       value={{
@@ -88,6 +109,8 @@ export function AccountProvider({ children }) {
         activeAccount,
         setActiveAccount,
         balanceLoading,
+        switching,
+        switchAccount,
       }}
     >
       {children}
