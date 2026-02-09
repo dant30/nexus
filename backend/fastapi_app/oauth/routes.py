@@ -6,12 +6,14 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel
 from asgiref.sync import sync_to_async
+from decimal import Decimal
 
 import django
 django.setup()
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django_core.accounts.models import Account
 from fastapi_app.oauth.deriv_oauth import DerivOAuthClient
 from fastapi_app.middleware.auth import TokenManager
 from shared.utils.logger import log_info, log_error, get_logger
@@ -54,7 +56,7 @@ def _infer_account_type(account: dict) -> str:
     return "real"
 
 
-def _select_default_account(account_list: list) -> tuple[Optional[dict], list]:
+def _select_default_account(account_list: list, primary_login_id: Optional[str]) -> tuple[Optional[dict], list]:
     if not account_list:
         return None, []
 
@@ -69,10 +71,22 @@ def _select_default_account(account_list: list) -> tuple[Optional[dict], list]:
         if account_type not in types:
             types.append(account_type)
 
+    if primary_login_id:
+        for account in normalized:
+            if str(account.get("loginid")) == str(primary_login_id):
+                return account, types
+
     for account in normalized:
         if account.get("is_virtual"):
             return account, types
     return normalized[0], types
+
+
+def _login_id_is_virtual(login_id: Optional[str]) -> Optional[bool]:
+    if not login_id:
+        return None
+    login_id = str(login_id)
+    return login_id.startswith("VRT")
 
 
 def _extract_oauth_payload(
@@ -124,6 +138,7 @@ async def _handle_oauth_callback(payload: OAuthCallbackRequest):
     deriv_country = None
     deriv_account_type = None
     deriv_is_virtual = None
+    primary_balance = None
 
     if user_info:
         deriv_id = user_info.get("user_id") or user_info.get("id")
@@ -139,9 +154,10 @@ async def _handle_oauth_callback(payload: OAuthCallbackRequest):
             or user_info.get("email_verified")
         )
         deriv_country = user_info.get("country")
+        primary_balance = user_info.get("balance")
 
         account_list = user_info.get("account_list") or []
-        default_account, account_types = _select_default_account(account_list)
+        default_account, account_types = _select_default_account(account_list, login_id)
         if default_account:
             login_id = login_id or default_account.get("loginid")
             currency = currency or default_account.get("currency")
@@ -194,7 +210,10 @@ async def _handle_oauth_callback(payload: OAuthCallbackRequest):
         user.deriv_country = str(deriv_country)
     if deriv_account_type:
         user.deriv_account_type = str(deriv_account_type)
-    if deriv_is_virtual is not None:
+    inferred_virtual = _login_id_is_virtual(login_id)
+    if inferred_virtual is not None:
+        user.deriv_is_virtual = bool(inferred_virtual)
+    elif deriv_is_virtual is not None:
         user.deriv_is_virtual = bool(deriv_is_virtual)
 
     if first_name:
@@ -203,6 +222,55 @@ async def _handle_oauth_callback(payload: OAuthCallbackRequest):
         user.last_name = str(last_name)
 
     await sync_to_async(user.save)()
+
+    # Sync Deriv accounts into local accounts table
+    account_list = user_info.get("account_list") if user_info else []
+    if account_list:
+        await sync_to_async(Account.objects.filter(user=user, is_default=True).update)(is_default=False)
+
+        has_default = False
+        for account in account_list:
+            account_login_id = account.get("loginid") or account.get("account_id")
+            if not account_login_id:
+                continue
+
+            is_virtual = _to_bool(account.get("is_virtual"))
+            if is_virtual is None:
+                is_virtual = _login_id_is_virtual(account_login_id) or False
+
+            account_type = Account.ACCOUNT_DEMO if is_virtual else Account.ACCOUNT_REAL
+            account_currency = account.get("currency") or currency or "USD"
+            account_balance = account.get("balance")
+            if account_balance is None and login_id and str(account_login_id) == str(login_id):
+                account_balance = primary_balance
+            if account_balance is None:
+                account_balance = "0"
+
+            is_default = False
+            if login_id and str(account_login_id) == str(login_id):
+                is_default = True
+                has_default = True
+
+            await sync_to_async(Account.objects.update_or_create)(
+                user=user,
+                deriv_account_id=str(account_login_id),
+                defaults={
+                    "account_type": account_type,
+                    "currency": str(account_currency),
+                    "balance": Decimal(str(account_balance)),
+                    "metadata": account or {},
+                    "is_default": is_default,
+                    "markup_percentage": getattr(user, "markup_percentage", 0),
+                },
+            )
+
+        if not has_default:
+            first_account = account_list[0]
+            fallback_login_id = first_account.get("loginid") or first_account.get("account_id")
+            if fallback_login_id:
+                await sync_to_async(Account.objects.filter(user=user, deriv_account_id=str(fallback_login_id)).update)(
+                    is_default=True
+                )
 
     # Generate JWT tokens
     access_jwt = TokenManager.create_token(user.id, user.username)

@@ -2,20 +2,23 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../../../features/auth/contexts/AuthContext.jsx";
 import { useAuthActions } from "../../../features/auth/hooks/useAuth.js";
+import { useBalance } from "../../../features/accounts/hooks/useBalance.js";
 
 export function Navbar() {
   const { user, isAuthenticated } = useAuth();
   const { signOut } = useAuthActions();
-  const accountLabel =
-    user?.deriv_is_virtual === true
-      ? "Virtual"
-      : user?.deriv_is_virtual === false
-      ? "Real"
-      : user?.deriv_account_type?.toString().includes("virtual")
-      ? "Virtual"
-      : user?.deriv_account_type
-      ? user.deriv_account_type
-      : "Virtual";
+  const { accountType } = useBalance();
+  const accountLabel = accountType?.toString().includes("virtual")
+    ? "Virtual"
+    : accountType
+    ? accountType
+    : user?.deriv_is_virtual === true
+    ? "Virtual"
+    : user?.deriv_is_virtual === false
+    ? "Real"
+    : user?.deriv_account_type
+    ? user.deriv_account_type
+    : "Virtual";
 
   return (
     <header className="border-b border-white/10 bg-slate/80 backdrop-blur">
