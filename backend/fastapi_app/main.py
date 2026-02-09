@@ -151,18 +151,20 @@ async def general_exception_handler(request: Request, exc: Exception):
     )
 
 
-# ============================================================================
+# ============================================================================ 
 # Health Check & Info Endpoints
 # ============================================================================
 @app.get("/health")
+@app.head("/health")
 async def health_check():
-    """Health check endpoint."""
-    return {
-        "status": "healthy",
-        "service": "nexus-trading-api",
-        "version": "1.0.0",
-    }
-
+    """Health check endpoint (supports GET & HEAD)."""
+    return JSONResponse(
+        content={
+            "status": "healthy",
+            "service": "nexus-trading-api",
+            "version": "1.0.0",
+        }
+    )
 
 @app.get("/api/info")
 async def api_info():
