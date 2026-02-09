@@ -18,20 +18,6 @@ SECURE_HSTS_PRELOAD = True
 # CORS settings for production
 CORS_ALLOWED_ORIGINS = env.get_list("CORS_ALLOWED_ORIGINS", [])
 
-# Database - Must be configured via environment variables
-DATABASES = {
-    "default": {
-        "ENGINE": env.get("DB_ENGINE", "django.db.backends.postgresql"),
-        "NAME": env.get("DB_NAME"),
-        "USER": env.get("DB_USER"),
-        "PASSWORD": env.get("DB_PASSWORD"),
-        "HOST": env.get("DB_HOST"),
-        "PORT": env.get_int("DB_PORT", 5432),
-        "ATOMIC_REQUESTS": True,
-        "CONN_MAX_AGE": 60,
-    }
-}
-
 # Email backend for production
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 EMAIL_HOST = env.get("EMAIL_HOST")
