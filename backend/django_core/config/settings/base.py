@@ -5,7 +5,7 @@ Django settings for Nexus Trading Bot - Base (common) settings.
 import os
 from pathlib import Path
 from datetime import timedelta
-from urllib.parse import urlparse
+import dj_database_url
 from shared.settings.env import env
 
 # Build paths
@@ -88,29 +88,22 @@ TEMPLATES = [
 WSGI_APPLICATION = "django_core.config.wsgi.application"
 
 # Database
-DATABASES = {
-    "default": {
-        "ENGINE": env.get("DB_ENGINE", "django.db.backends.postgresql"),
-        "NAME": env.get("DB_NAME", "nexus_db"),
-        "USER": env.get("DB_USER", "postgres"),
-        "PASSWORD": env.get("DB_PASSWORD", "postgres"),
-        "HOST": env.get("DB_HOST", "localhost"),
-        "PORT": env.get_int("DB_PORT", 5432),
-        "ATOMIC_REQUESTS": True,
+DATABASE_URL = env.get("DATABASE_URL")
+if DATABASE_URL:
+    DATABASES = {
+        "default": dj_database_url.parse(DATABASE_URL, conn_max_age=600),
     }
-}
-
-database_url = env.get("DATABASE_URL")
-if database_url:
-    parsed = urlparse(database_url)
-    DATABASES["default"] = {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": (parsed.path or "/")[1:],
-        "USER": parsed.username or "",
-        "PASSWORD": parsed.password or "",
-        "HOST": parsed.hostname or "",
-        "PORT": parsed.port or 5432,
-        "ATOMIC_REQUESTS": True,
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": env.get("DB_ENGINE", "django.db.backends.postgresql"),
+            "NAME": env.get("DB_NAME", "nexus_db"),
+            "USER": env.get("DB_USER", "postgres"),
+            "PASSWORD": env.get("DB_PASSWORD", "postgres"),
+            "HOST": env.get("DB_HOST", "localhost"),
+            "PORT": env.get_int("DB_PORT", 5432),
+            "ATOMIC_REQUESTS": True,
+        }
     }
 
 # Password validation

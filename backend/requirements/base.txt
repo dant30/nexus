@@ -27,6 +27,7 @@ django-redis==5.4.0
 celery==5.3.4
 
 # Environment Configuration
+dj-database-url==2.2.0
 python-dotenv==1.0.0
 
 # Utilities
