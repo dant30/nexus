@@ -5,6 +5,7 @@ Django settings for Nexus Trading Bot - Base (common) settings.
 import os
 from pathlib import Path
 from datetime import timedelta
+from urllib.parse import urlparse
 from shared.settings.env import env
 
 # Build paths
@@ -98,6 +99,19 @@ DATABASES = {
         "ATOMIC_REQUESTS": True,
     }
 }
+
+database_url = env.get("DATABASE_URL")
+if database_url:
+    parsed = urlparse(database_url)
+    DATABASES["default"] = {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": (parsed.path or "/")[1:],
+        "USER": parsed.username or "",
+        "PASSWORD": parsed.password or "",
+        "HOST": parsed.hostname or "",
+        "PORT": parsed.port or 5432,
+        "ATOMIC_REQUESTS": True,
+    }
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
