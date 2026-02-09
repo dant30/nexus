@@ -9,7 +9,7 @@ django-cors-headers==4.3.1
 django-environ==0.12.0
 
 # Static Files Compression
-django-compressor==4.1.1
+django-compressor>=4.2,<4.7
 
 # Database Pooling
 psycopg2-binary==2.9.9
