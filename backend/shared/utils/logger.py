@@ -1,45 +1,94 @@
-"""Logging utilities."""
-import logging
+"""
+Centralized logging utilities for Nexus Trading.
+
+- UTF-8 safe (Windows friendly)
+- Structured logging
+- API / OAuth / Trading ready
+"""
+
+from __future__ import annotations
+
 import json
-from typing import Any, Dict
-
-logger = logging.getLogger("trading")
-
-
-def log_info(message: str, **kwargs):
-    """Log an info message with structured data."""
-    if kwargs:
-        logger.info(f"{message} | {json.dumps(kwargs)}")
-    else:
-        logger.info(message)
+import logging
+import sys
+from typing import Any, Dict, Optional
 
 
-def log_warning(message: str, **kwargs):
-    """Log a warning message with structured data."""
-    if kwargs:
-        logger.warning(f"{message} | {json.dumps(kwargs)}")
-    else:
-        logger.warning(message)
+# ---------- Formatter ----------
+
+class JsonFormatter(logging.Formatter):
+    """JSON log formatter (safe for UTF-8, prod, and log aggregators)."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        log_record: Dict[str, Any] = {
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+            "time": self.formatTime(record, self.datefmt),
+        }
+
+        # Attach structured context if present
+        if hasattr(record, "context") and isinstance(record.context, dict):
+            log_record.update(record.context)
+
+        # Attach exception info if present
+        if record.exc_info:
+            log_record["exception"] = self.formatException(record.exc_info)
+
+        return json.dumps(log_record, ensure_ascii=False)
 
 
-def log_error(message: str, exception: Exception = None, **kwargs):
-    """Log an error message with optional exception."""
-    if exception:
-        logger.error(f"{message} | Exception: {str(exception)}", exc_info=True)
-    elif kwargs:
-        logger.error(f"{message} | {json.dumps(kwargs)}")
-    else:
-        logger.error(message)
+# ---------- Logger Setup ----------
+
+def _configure_logger(name: str) -> logging.Logger:
+    logger = logging.getLogger(name)
+
+    if logger.handlers:
+        return logger  # already configured
+
+    logger.setLevel(logging.INFO)
+
+    handler = logging.StreamHandler(sys.stdout)
+    handler.stream.reconfigure(encoding="utf-8")
+
+    formatter = JsonFormatter()
+    handler.setFormatter(formatter)
+
+    logger.addHandler(handler)
+    logger.propagate = False
+
+    return logger
 
 
-def log_debug(message: str, **kwargs):
-    """Log a debug message with structured data."""
-    if kwargs:
-        logger.debug(f"{message} | {json.dumps(kwargs)}")
-    else:
-        logger.debug(message)
+logger = _configure_logger("nexus-trading")
+
+
+# ---------- Public API ----------
+
+def log_info(message: str, **context: Any) -> None:
+    logger.info(message, extra={"context": context} if context else None)
+
+
+def log_warning(message: str, **context: Any) -> None:
+    logger.warning(message, extra={"context": context} if context else None)
+
+
+def log_debug(message: str, **context: Any) -> None:
+    logger.debug(message, extra={"context": context} if context else None)
+
+
+def log_error(
+    message: str,
+    *,
+    exception: Optional[Exception] = None,
+    **context: Any,
+) -> None:
+    logger.error(
+        message,
+        exc_info=exception,
+        extra={"context": context} if context else None,
+    )
 
 
 def get_logger(name: str) -> logging.Logger:
-    """Get a logger by name."""
-    return logging.getLogger(name)
+    return _configure_logger(name)

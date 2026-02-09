@@ -99,28 +99,30 @@ class DerivOAuthClient:
         - Dict with user info or None on error
         """
         try:
-            # Deriv user data is returned by the WebSocket "authorize" call.
-            ws_url = f"wss://ws.derivws.com/ws?app_id={self.app_id}"
+            ws_url = f"wss://ws.deriv.com/websockets/v3?app_id={self.app_id}"
             payload = {"authorize": access_token}
 
-            async with websockets.connect(ws_url) as ws:
+            async with websockets.connect(ws_url, ping_interval=20) as ws:
                 await ws.send(json.dumps(payload))
                 raw = await asyncio.wait_for(ws.recv(), timeout=10)
                 response = json.loads(raw)
 
-            if "authorize" in response:
-                log_info("User info fetched from Deriv (authorize)")
-                return response.get("authorize")
-
-            if "error" in response:
+            if response.get("error"):
                 log_error(
-                    "Failed to authorize Deriv token",
-                    code=response.get("error", {}).get("code"),
-                    message=response.get("error", {}).get("message"),
+                    "Deriv authorize failed",
+                    code=response["error"].get("code"),
+                    message=response["error"].get("message"),
                 )
                 return None
 
-            log_error("Unexpected Deriv authorize response", response=response)
+            if "authorize" in response:
+                log_info(
+                    "User info fetched from Deriv",
+                    deriv_user_id=response["authorize"].get("user_id"),
+                )
+                return response["authorize"]
+
+            log_error("Unexpected Deriv response", response=response)
             return None
 
         except Exception as e:
