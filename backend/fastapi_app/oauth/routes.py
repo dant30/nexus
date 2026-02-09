@@ -3,12 +3,14 @@ OAuth integration routes for Deriv.
 """
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
 import django
 django.setup()
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from fastapi_app.oauth.deriv_oauth import DerivOAuthClient
 from fastapi_app.middleware.auth import TokenManager
@@ -157,9 +159,9 @@ async def deriv_oauth_callback(request: OAuthCallbackRequest):
             detail="OAuth callback failed",
         )
 
-
 @router.get("/deriv/callback")
 async def deriv_oauth_callback_get(
+    request: Request,
     code: Optional[str] = None,
     token: Optional[str] = None,
     account_id: Optional[str] = None,
@@ -170,15 +172,17 @@ async def deriv_oauth_callback_get(
 ):
     """
     Handle Deriv OAuth callback via GET (for providers that redirect with query params).
+    Redirect browser to frontend callback page preserving query string so frontend handles the exchange.
     """
     try:
-        payload = _extract_oauth_payload(
-            code=code,
-            token=token1 or token,
-            account_id=acct1 or account_id,
-            currency=cur1 or currency,
-        )
-        return await _handle_oauth_callback(payload)
+        # If you want backend to handle exchange server-side instead, call _handle_oauth_callback here.
+        frontend_callback = getattr(settings, "DERIV_OAUTH_CALLBACK_URL", "http://localhost:5173/oauth/callback")
+        query = request.url.query
+        redirect_url = f"{frontend_callback}?{query}" if query else frontend_callback
+
+        log_info("Redirecting OAuth GET callback to frontend", redirect_url=redirect_url)
+        return RedirectResponse(url=redirect_url, status_code=302)
+
     except HTTPException:
         raise
     except Exception as e:
