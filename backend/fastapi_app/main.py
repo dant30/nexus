@@ -4,7 +4,6 @@ Integrates Django ORM, WebSocket, and trading engine.
 """
 import logging
 import asyncio
-import random
 import time
 from contextlib import asynccontextmanager
 from typing import Optional
@@ -26,6 +25,7 @@ from fastapi_app.middleware.auth import JWTAuthMiddleware
 from fastapi_app.middleware.logging import LoggingMiddleware
 from fastapi_app.api import routes
 from fastapi_app.oauth import routes as oauth_routes
+from fastapi_app.deriv_ws.client import DerivWebSocketClient
 
 logger = get_logger("fastapi")
 
@@ -37,8 +37,9 @@ class AppState:
     active_trades = {}
     bot_instances = {}
     ws_subscriptions = {}
-    ws_tasks = {}
-    ws_tick_state = {}
+    deriv_client = None
+    deriv_subscriptions = set()
+    market_ticks = {}
 
 
 @asynccontextmanager

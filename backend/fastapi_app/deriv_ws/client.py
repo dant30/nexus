@@ -29,7 +29,7 @@ class DerivWebSocketClient:
     - Graceful shutdown
     """
     
-    DERIV_WS_URL = "wss://ws.derivws.com/ws"
+    DERIV_WS_URL = "wss://ws.derivws.com/websockets/v3"
     RECONNECT_DELAY = 3  # Start with 3 seconds
     MAX_RECONNECT_DELAY = 300  # Cap at 5 minutes
     
@@ -61,7 +61,10 @@ class DerivWebSocketClient:
             self.status = WebSocketStatus.CONNECTING
             log_info("Connecting to Deriv WebSocket")
             
-            self.ws = await websockets.connect(self.DERIV_WS_URL)
+            url = self.DERIV_WS_URL
+            if self.app_id:
+                url = f"{self.DERIV_WS_URL}?app_id={self.app_id}"
+            self.ws = await websockets.connect(url)
             self.status = WebSocketStatus.CONNECTED
             self.reconnect_delay = self.RECONNECT_DELAY
             
