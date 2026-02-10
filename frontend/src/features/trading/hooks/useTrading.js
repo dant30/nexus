@@ -40,6 +40,15 @@ export const useTrading = () => {
       setLoading(true);
       setError(null);
       try {
+        const allowedContracts = new Set(TRADING.CONTRACT_TYPES.map((c) => c.value));
+        const allowedDirections = new Set(TRADING.DIRECTIONS.map((d) => d.value));
+        if (payload?.contract_type && !allowedContracts.has(payload.contract_type)) {
+          throw new Error("Only Call/Put contract types are supported.");
+        }
+        if (payload?.direction && !allowedDirections.has(payload.direction)) {
+          throw new Error("Only Rise/Fall directions are supported.");
+        }
+
         const normalizedPayload = {
           duration_seconds: 300,
           ...payload,

@@ -21,7 +21,8 @@ export function SignalDisplay({ signal }) {
           <div>
             <p className="text-sm font-semibold text-white">{signal.symbol}</p>
             <p className="text-xs text-white/60">
-              {signal.direction} • {signal.timeframe}
+              {signal.direction === "RISE" ? "Rise" : signal.direction === "FALL" ? "Fall" : signal.direction} •{" "}
+              {signal.timeframe}
             </p>
           </div>
           <div className="text-right">

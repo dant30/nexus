@@ -20,8 +20,8 @@ import { useTradingContext } from "../contexts/TradingContext.jsx";
 
 export function ManualTrading() {
   const [market, setMarket] = useState("EURUSD");
-  const [contractType, setContractType] = useState("CALL");
-  const [direction, setDirection] = useState("RISE");
+  const [contractType, setContractType] = useState(TRADING.CONTRACT_TYPES[0].value);
+  const [direction, setDirection] = useState(TRADING.DIRECTIONS[0].value);
   const [stake, setStake] = useState(TRADING.DEFAULT_STAKE);
   const { timeframeSeconds, setTimeframeSeconds } = useTradingContext();
 

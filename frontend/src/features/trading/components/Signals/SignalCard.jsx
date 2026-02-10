@@ -8,7 +8,8 @@ export function SignalCard({ signal }) {
         <span className="text-emerald-300">{(signal.confidence * 100).toFixed(0)}%</span>
       </div>
       <div className="mt-1 text-white/60">
-        {signal.direction} • {signal.timeframe} • {signal.source}
+        {(signal.direction === "RISE" && "Rise") || (signal.direction === "FALL" && "Fall") || signal.direction} •{" "}
+        {signal.timeframe} • {signal.source}
       </div>
     </div>
   );
