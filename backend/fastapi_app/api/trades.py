@@ -181,8 +181,8 @@ async def execute_trade(
 
         proposal = await client.wait_for_event(
             "proposal",
-            predicate=lambda e: e.get("raw", {}).get("req_id") == proposal_req_id,
-            timeout=15,
+            predicate=lambda e: e.get("raw", {}).get("req_id") in {proposal_req_id, None},
+            timeout=20,
         )
         if proposal and proposal.get("event") == "error":
             raise HTTPException(status_code=502, detail=proposal.get("message", "Deriv error"))
@@ -197,8 +197,8 @@ async def execute_trade(
         )
         buy = await client.wait_for_event(
             "buy",
-            predicate=lambda e: e.get("raw", {}).get("req_id") == buy_req_id,
-            timeout=15,
+            predicate=lambda e: e.get("raw", {}).get("req_id") in {buy_req_id, None},
+            timeout=20,
         )
         if buy and buy.get("event") == "error":
             raise HTTPException(status_code=502, detail=buy.get("message", "Deriv error"))

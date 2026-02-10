@@ -72,7 +72,10 @@ class DerivWebSocketClient:
             log_info("Connected to Deriv")
             
             # Authorize
-            await self.authorize()
+            if not await self.authorize():
+                await self.disconnect()
+                self.status = WebSocketStatus.ERROR
+                return False
             
             # Start message loop
             asyncio.create_task(self._message_loop())
@@ -98,7 +101,7 @@ class DerivWebSocketClient:
             if self.ws is None:
                 return False
             await self.ws.send(json.dumps(request))
-            auth_event = await self.wait_for_event("authorize", timeout=10)
+            auth_event = await self.wait_for_event("authorize", timeout=20)
             if not auth_event:
                 log_error("Authorization timeout")
                 return False
