@@ -2,12 +2,12 @@ import React from "react";
 import { Navigate, Outlet } from "react-router-dom";
 import { useAuth } from "../../../features/auth/contexts/AuthContext.jsx";
 
-export function ProtectedRoute() {
+export function ProtectedRoute({ children }) {
   const { isAuthenticated, loading } = useAuth();
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-ink text-white flex items-center justify-center">
+      <div className="flex min-h-screen items-center justify-center bg-ink text-white">
         <span className="text-sm text-white/60">Checking session...</span>
       </div>
     );
@@ -17,5 +17,5 @@ export function ProtectedRoute() {
     return <Navigate to="/login" replace />;
   }
 
-  return <Outlet />;
+  return children || <Outlet />;
 }
