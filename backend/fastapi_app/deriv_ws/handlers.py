@@ -42,6 +42,8 @@ class DerivEventHandler:
                 return await self._handle_tick(message)
             elif "ohlc" in message:
                 return await self._handle_ohlc(message)
+            elif "candles" in message:
+                return await self._handle_candles(message)
             elif "balance" in message:
                 return await self._handle_balance(message)
             elif "proposal"in message:
@@ -75,6 +77,15 @@ class DerivEventHandler:
                 f"Candle received: {candle['symbol']} @ {candle['close']}",
             )
         return candle
+
+    async def _handle_candles(self, data: Dict[str, Any]) -> Optional[Dict]:
+        """Handle candle snapshot list."""
+        payload = DerivSerializer.deserialize_candles(data)
+        if payload:
+            log_info(
+                f"Candle snapshot received: {payload['symbol']} ({len(payload['candles'])})"
+            )
+        return payload
     
     async def _handle_balance(self, data: Dict[str, Any]) -> Optional[Dict]:
         """Handle balance update."""

@@ -313,6 +313,34 @@ class DerivSerializer:
         except Exception as e:
             log_error("Failed to deserialize ohlc", exception=e)
             return None
+
+    @staticmethod
+    def deserialize_candles(data: Dict[str, Any]) -> Optional[Dict]:
+        """Deserialize candle snapshot list from Deriv."""
+        try:
+            if "candles" not in data:
+                return None
+            candles = data.get("candles", [])
+            symbol = data.get("echo_req", {}).get("ticks_history")
+            normalized = []
+            for candle in candles:
+                normalized.append({
+                    "symbol": symbol,
+                    "time": candle.get("epoch"),
+                    "open": float(candle.get("open", 0)),
+                    "high": float(candle.get("high", 0)),
+                    "low": float(candle.get("low", 0)),
+                    "close": float(candle.get("close", 0)),
+                })
+            return {
+                "event": "candles",
+                "symbol": symbol,
+                "candles": normalized,
+                "raw": data,
+            }
+        except Exception as e:
+            log_error("Failed to deserialize candles", exception=e)
+            return None
     
     @staticmethod
     def deserialize_balance(data: Dict[str, Any]) -> Optional[Decimal]:

@@ -2,6 +2,7 @@
 Trade execution and history routes.
 """
 from typing import Optional, List
+import time
 from decimal import Decimal
 from enum import Enum
 
@@ -26,6 +27,9 @@ logger = get_logger("trades")
 User = get_user_model()
 
 router = APIRouter(tags=["Trades"])
+
+def _next_req_id() -> int:
+    return int(time.time() * 1000)
 
 
 # ============================================================================
@@ -164,7 +168,7 @@ async def execute_trade(
         elif request.direction == Direction.FALL:
             contract_type = ContractType.PUT.value
 
-        proposal_req_id = generate_proposal_id()
+        proposal_req_id = _next_req_id()
         await client.request_proposal(
             symbol=request.symbol,
             contract_type=contract_type,
@@ -185,7 +189,7 @@ async def execute_trade(
         if not proposal:
             raise HTTPException(status_code=502, detail="Deriv proposal timeout")
 
-        buy_req_id = generate_proposal_id()
+        buy_req_id = _next_req_id()
         await client.buy_contract(
             proposal_id=proposal["id"],
             price=proposal["ask_price"],

@@ -74,7 +74,9 @@ async def lifespan(app: FastAPI):
             deriv_symbol = payload["symbol"]
             event = payload.get("event", "tick")
 
-            if event == "ohlc":
+            if event == "candles":
+                app.state.market_candles[deriv_symbol] = payload.get("candles", [])[-600:]
+            elif event == "ohlc":
                 app.state.market_candles.setdefault(deriv_symbol, []).append(payload)
                 app.state.market_candles[deriv_symbol] = app.state.market_candles[deriv_symbol][-600:]
             else:
@@ -89,7 +91,9 @@ async def lifespan(app: FastAPI):
                     if not websocket:
                         continue
 
-                    if event == "ohlc":
+                    if event == "candles":
+                        await _send_event(websocket, "candles", payload.get("candles", []))
+                    elif event == "ohlc":
                         await _send_event(websocket, "candle", payload)
                     else:
                         subscription["ticks"].append(payload)
