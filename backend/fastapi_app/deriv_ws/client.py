@@ -128,6 +128,25 @@ class DerivWebSocketClient:
         except Exception as e:
             log_error(f"Failed to subscribe to ticks: {symbol}", exception=e)
             return False
+
+    async def subscribe_candles(self, symbol: str, granularity: int) -> bool:
+        """
+        Subscribe to candle updates for a symbol.
+        """
+        try:
+            request = {
+                "candles": symbol,
+                "subscribe": 1,
+                "granularity": granularity,
+            }
+
+            await self.send(request)
+            log_info(f"Subscribed to candles: {symbol} @ {granularity}s")
+            return True
+
+        except Exception as e:
+            log_error(f"Failed to subscribe to candles: {symbol}", exception=e)
+            return False
     
     async def send(self, data: Dict[str, Any]) -> bool:
         """

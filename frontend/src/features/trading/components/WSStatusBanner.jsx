@@ -2,7 +2,7 @@ import React from "react";
 import { useWebSocket } from "../../../providers/WSProvider.jsx";
 
 export function WSStatusBanner() {
-  const { connected, error, reconnect } = useWebSocket();
+  const { connected, error, reconnect, lastStatus, reconnectAttempts } = useWebSocket();
 
   if (connected) {
     return (
@@ -14,7 +14,12 @@ export function WSStatusBanner() {
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-amber-500/10 px-4 py-2 text-xs text-amber-200">
-      <span>{error ? "Live data error. Please reconnect." : "Connecting to live data..."}</span>
+      <span>
+        {error ? "Live data error. Please reconnect." : "Connecting to live data..."}{" "}
+        <span className="text-amber-100/70">
+          Status: {lastStatus} • Attempts: {reconnectAttempts}
+        </span>
+      </span>
       <button
         className="rounded-md bg-amber-400/20 px-3 py-1 text-xs font-semibold text-amber-100"
         onClick={reconnect}

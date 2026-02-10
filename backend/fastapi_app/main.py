@@ -39,6 +39,7 @@ class AppState:
     deriv_client = None
     deriv_subscriptions = set()
     market_ticks = {}
+    market_candles = {}
 
 
 @asynccontextmanager
@@ -66,27 +67,29 @@ async def lifespan(app: FastAPI):
             if not payload or "symbol" not in payload:
                 return
             symbol = payload["symbol"]
-            app.state.market_ticks.setdefault(symbol, []).append(payload)
-            app.state.market_ticks[symbol] = app.state.market_ticks[symbol][-600:]
+            event = payload.get("event", "tick")
+
+            if event == "ohlc":
+                app.state.market_candles.setdefault(symbol, []).append(payload)
+                app.state.market_candles[symbol] = app.state.market_candles[symbol][-600:]
+            else:
+                app.state.market_ticks.setdefault(symbol, []).append(payload)
+                app.state.market_ticks[symbol] = app.state.market_ticks[symbol][-600:]
 
             for connection_id, subscriptions in app.state.ws_subscriptions.items():
                 subscription = subscriptions.get(symbol)
                 if not subscription:
                     continue
-                subscription["ticks"].append(payload)
-                subscription["ticks"] = subscription["ticks"][-600:]
                 websocket = app.state.ws_connections.get(connection_id)
                 if not websocket:
                     continue
-                await _send_event(websocket, "tick", payload)
 
-                interval = subscription.get("interval", 60)
-                now = payload.get("time", int(time.time()))
-                if now - subscription["last_candle"] >= interval:
-                    candles = _build_candles(subscription["ticks"], interval, count=1)
-                    if candles:
-                        await _send_event(websocket, "candle", candles[-1])
-                        subscription["last_candle"] = now
+                if event == "ohlc":
+                    await _send_event(websocket, "candle", payload)
+                else:
+                    subscription["ticks"].append(payload)
+                    subscription["ticks"] = subscription["ticks"][-600:]
+                    await _send_event(websocket, "tick", payload)
 
         app.state.deriv_client.on_message(_deriv_callback)
         await app.state.deriv_client.connect()
@@ -358,9 +361,11 @@ async def handle_ws_message(websocket: WebSocket, user_id: int, account_id: int,
             "ticks": app.state.market_ticks.get(symbol, [])[-600:],
             "last_candle": 0,
         }
-        if app.state.deriv_client and symbol not in app.state.deriv_subscriptions:
-            await app.state.deriv_client.subscribe_ticks(symbol)
-            app.state.deriv_subscriptions.add(symbol)
+        if app.state.deriv_client:
+            if symbol not in app.state.deriv_subscriptions:
+                await app.state.deriv_client.subscribe_ticks(symbol)
+                app.state.deriv_subscriptions.add(symbol)
+            await app.state.deriv_client.subscribe_candles(symbol, interval)
         
     elif event_type == "unsubscribe":
         symbol = data.get("symbol")
@@ -374,8 +379,12 @@ async def handle_ws_message(websocket: WebSocket, user_id: int, account_id: int,
         interval = int(data.get("interval") or 60)
         connection_id = f"{user_id}_{account_id}"
         subscription = app.state.ws_subscriptions.get(connection_id, {}).get(symbol)
-        ticks = subscription["ticks"] if subscription else app.state.market_ticks.get(symbol, [])
-        candles = _build_candles(ticks, interval, count=60)
+        candles = []
+        if subscription:
+            candles = app.state.market_candles.get(symbol, [])
+        if not candles:
+            ticks = subscription["ticks"] if subscription else app.state.market_ticks.get(symbol, [])
+            candles = _build_candles(ticks, interval, count=60)
         await _send_event(websocket, "candles", candles)
 
     elif event_type == "signals_snapshot":

@@ -6,6 +6,7 @@ import { OpenTrades } from "../components/TradeHistory/OpenTrades.jsx";
 import { ClosedTrades } from "../components/TradeHistory/ClosedTrades.jsx";
 import { TradeStats } from "../components/TradeHistory/TradeStats.jsx";
 import { WSStatusBanner } from "../components/WSStatusBanner.jsx";
+import { WSErrorToast } from "../components/WSErrorToast.jsx";
 
 const tabs = [
   { id: "manual", label: "Manual" },
@@ -18,6 +19,7 @@ export function TradingDashboard() {
 
   return (
     <div className="space-y-6 p-6 text-white">
+      <WSErrorToast />
       <div>
         <h2 className="text-xl font-semibold">Trading Dashboard</h2>
         <p className="text-sm text-white/60">Execute trades and monitor live signals.</p>

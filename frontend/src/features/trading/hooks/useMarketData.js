@@ -37,6 +37,7 @@ const buildCandles = (ticks, interval) => {
 export const useMarketData = (symbol, timeframeSeconds = 60) => {
   const { subscribeTick, unsubscribeTick, onMessage, connected, sendMessage } = useWebSocket();
   const [ticks, setTicks] = useState([]);
+  const [candles, setCandles] = useState([]);
   const [error, setError] = useState(null);
 
   const handleTick = useCallback(
@@ -64,22 +65,28 @@ export const useMarketData = (symbol, timeframeSeconds = 60) => {
           .filter((entry) => entry?.symbol === symbol)
           .map((entry) => ({
             symbol: entry.symbol,
-            price: Number(entry.close ?? entry.price ?? 0),
             time: Number(entry.time ?? entry.epoch ?? Math.floor(Date.now() / 1000)),
+            open: Number(entry.open ?? entry.price ?? 0),
+            high: Number(entry.high ?? entry.price ?? 0),
+            low: Number(entry.low ?? entry.price ?? 0),
+            close: Number(entry.close ?? entry.price ?? 0),
           }))
-          .filter((entry) => entry.price);
+          .filter((entry) => entry.close);
         if (!normalized.length) return;
-        setTicks((prev) => [...prev, ...normalized].slice(-MAX_TICKS));
+        setCandles(normalized.slice(-MAX_CANDLES));
         return;
       }
       if (!raw?.symbol || raw.symbol !== symbol) return;
-      const candleTick = {
+      const candle = {
         symbol: raw.symbol,
-        price: Number(raw.close ?? raw.price ?? 0),
         time: Number(raw.time ?? raw.epoch ?? Math.floor(Date.now() / 1000)),
+        open: Number(raw.open ?? raw.price ?? 0),
+        high: Number(raw.high ?? raw.price ?? 0),
+        low: Number(raw.low ?? raw.price ?? 0),
+        close: Number(raw.close ?? raw.price ?? 0),
       };
-      if (!candleTick.price) return;
-      setTicks((prev) => [...prev, candleTick].slice(-MAX_TICKS));
+      if (!candle.close) return;
+      setCandles((prev) => [...prev, candle].slice(-MAX_CANDLES));
     },
     [symbol]
   );
@@ -110,11 +117,19 @@ export const useMarketData = (symbol, timeframeSeconds = 60) => {
     handleCandle,
   ]);
 
-  const candles = useMemo(
+  useEffect(() => {
+    setTicks([]);
+    setCandles([]);
+  }, [symbol, timeframeSeconds]);
+
+  const fallbackCandles = useMemo(
     () => buildCandles(ticks, timeframeSeconds || 60),
     [ticks, timeframeSeconds]
   );
-  const data = useMemo(() => ({ symbol, ticks, candles }), [symbol, ticks, candles]);
+  const data = useMemo(
+    () => ({ symbol, ticks, candles: candles.length ? candles : fallbackCandles }),
+    [symbol, ticks, candles, fallbackCandles]
+  );
 
   return { data, loading: !connected, error };
 };

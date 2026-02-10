@@ -23,6 +23,7 @@ class DerivEventHandler:
             DerivEventType.TICK: self._handle_tick,
             DerivEventType.BALANCE: self._handle_balance,
             DerivEventType.PROPOSAL: self._handle_proposal,
+            DerivEventType.CANDLE: self._handle_ohlc,
         }
     
     async def handle_message(self, message: Dict[str, Any]) -> Optional[Dict]:
@@ -39,6 +40,8 @@ class DerivEventHandler:
             # Determine message type
             if "tick" in message:
                 return await self._handle_tick(message)
+            elif "ohlc" in message:
+                return await self._handle_ohlc(message)
             elif "balance" in message:
                 return await self._handle_balance(message)
             elif "proposal"in message:
@@ -59,6 +62,15 @@ class DerivEventHandler:
         if tick:
             log_info(f"Tick received: {tick['symbol']} @ {tick['price']}")
         return tick
+
+    async def _handle_ohlc(self, data: Dict[str, Any]) -> Optional[Dict]:
+        """Handle candle update."""
+        candle = DerivSerializer.deserialize_ohlc(data)
+        if candle:
+            log_info(
+                f"Candle received: {candle['symbol']} @ {candle['close']}",
+            )
+        return candle
     
     async def _handle_balance(self, data: Dict[str, Any]) -> Optional[Dict]:
         """Handle balance update."""

@@ -25,6 +25,7 @@ export function SignalsMonitor() {
           onChange={(event) => setTimeframeSeconds(Number(event.target.value))}
           className="max-w-[160px]"
         >
+          <option value={0}>All</option>
           <option value={60}>1 minute</option>
           <option value={300}>5 minutes</option>
           <option value={900}>15 minutes</option>

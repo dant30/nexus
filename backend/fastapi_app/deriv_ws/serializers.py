@@ -162,6 +162,28 @@ class DerivSerializer:
             "ticks": symbol,
             "subscribe": 1,
         }
+
+    @staticmethod
+    def serialize_subscribe_candles(
+        symbol: str,
+        granularity: int,
+        **kwargs
+    ) -> Dict[str, Any]:
+        """
+        Serialize candle subscription request.
+
+        Args:
+        - symbol: Trading symbol (e.g., "EURUSD")
+        - granularity: Candle period in seconds
+
+        Returns:
+        - Subscription request dict
+        """
+        return {
+            "candles": symbol,
+            "subscribe": 1,
+            "granularity": granularity,
+        }
     
     @staticmethod
     def serialize_buy_contract(
@@ -201,6 +223,7 @@ class DerivSerializer:
             
             tick = data["tick"]
             return {
+                "event": "tick",
                 "symbol": data.get("echo_req", {}).get("ticks"),
                 "price": float(tick.get("quote", 0)),
                 "bid": float(tick.get("bid", 0)),
@@ -210,6 +233,29 @@ class DerivSerializer:
             }
         except Exception as e:
             log_error("Failed to deserialize tick", exception=e)
+            return None
+
+    @staticmethod
+    def deserialize_ohlc(data: Dict[str, Any]) -> Optional[Dict]:
+        """
+        Deserialize candle (OHLC) data from Deriv.
+        """
+        try:
+            if "ohlc" not in data:
+                return None
+            candle = data["ohlc"]
+            return {
+                "event": "ohlc",
+                "symbol": candle.get("symbol") or data.get("echo_req", {}).get("candles"),
+                "time": candle.get("epoch"),
+                "open": float(candle.get("open", 0)),
+                "high": float(candle.get("high", 0)),
+                "low": float(candle.get("low", 0)),
+                "close": float(candle.get("close", 0)),
+                "raw": data,
+            }
+        except Exception as e:
+            log_error("Failed to deserialize ohlc", exception=e)
             return None
     
     @staticmethod

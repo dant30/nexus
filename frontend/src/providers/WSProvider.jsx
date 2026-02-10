@@ -19,6 +19,9 @@ export function WSProvider({ children }) {
   const [wsState, setWSState] = useState({
     connected: false,
     error: null,
+    lastStatus: "disconnected",
+    reconnectAttempts: 0,
+    lastErrorAt: null,
   });
 
   // Connect WebSocket when user is authenticated
@@ -31,20 +34,55 @@ export function WSProvider({ children }) {
     wsManager
       .connect(wsUrl)
       .then(() => {
-        setWSState({ connected: true, error: null });
+        const stats = wsManager.getStats();
+        setWSState((prev) => ({
+          ...prev,
+          connected: true,
+          error: null,
+          lastStatus: "connected",
+          reconnectAttempts: stats.reconnectAttempts,
+        }));
       })
       .catch((error) => {
-        setWSState({ connected: false, error });
+        const stats = wsManager.getStats();
+        setWSState((prev) => ({
+          ...prev,
+          connected: false,
+          error,
+          lastStatus: "error",
+          reconnectAttempts: stats.reconnectAttempts,
+          lastErrorAt: Date.now(),
+        }));
       });
 
     // Listen for connection changes
     const unsubscribe = wsManager.onConnectionChange((event) => {
+      const stats = wsManager.getStats();
       if (event.status === "connected") {
-        setWSState({ connected: true, error: null });
+        setWSState((prev) => ({
+          ...prev,
+          connected: true,
+          error: null,
+          lastStatus: "connected",
+          reconnectAttempts: stats.reconnectAttempts,
+        }));
       } else if (event.status === "disconnected") {
-        setWSState({ connected: false, error: null });
+        setWSState((prev) => ({
+          ...prev,
+          connected: false,
+          error: null,
+          lastStatus: "disconnected",
+          reconnectAttempts: stats.reconnectAttempts,
+        }));
       } else if (event.status === "error") {
-        setWSState({ connected: false, error: event.error });
+        setWSState((prev) => ({
+          ...prev,
+          connected: false,
+          error: event.error,
+          lastStatus: "error",
+          reconnectAttempts: stats.reconnectAttempts,
+          lastErrorAt: Date.now(),
+        }));
       }
     });
 
@@ -75,9 +113,24 @@ export function WSProvider({ children }) {
     wsManager.disconnect();
     try {
       await wsManager.connect(wsUrlRef.current);
-      setWSState({ connected: true, error: null });
+      const stats = wsManager.getStats();
+      setWSState((prev) => ({
+        ...prev,
+        connected: true,
+        error: null,
+        lastStatus: "connected",
+        reconnectAttempts: stats.reconnectAttempts,
+      }));
     } catch (error) {
-      setWSState({ connected: false, error });
+      const stats = wsManager.getStats();
+      setWSState((prev) => ({
+        ...prev,
+        connected: false,
+        error,
+        lastStatus: "error",
+        reconnectAttempts: stats.reconnectAttempts,
+        lastErrorAt: Date.now(),
+      }));
     }
   }, []);
 
