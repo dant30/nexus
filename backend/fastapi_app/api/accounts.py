@@ -7,6 +7,7 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
+from asgiref.sync import sync_to_async
 
 import django
 django.setup()
@@ -58,8 +59,8 @@ class SetDefaultAccountRequest(BaseModel):
 async def list_accounts(current_user: CurrentUser = Depends(get_current_user)):
     """List all accounts for current user."""
     try:
-        user = User.objects.get(id=current_user.user_id)
-        accounts = get_user_accounts(user)
+        user = await sync_to_async(User.objects.get)(id=current_user.user_id)
+        accounts = await sync_to_async(list)(get_user_accounts(user))
         
         return [
             AccountResponse(
@@ -86,8 +87,8 @@ async def list_accounts(current_user: CurrentUser = Depends(get_current_user)):
 async def get_default_account_endpoint(current_user: CurrentUser = Depends(get_current_user)):
     """Get user's default account."""
     try:
-        user = User.objects.get(id=current_user.user_id)
-        account = get_default_account(user)
+        user = await sync_to_async(User.objects.get)(id=current_user.user_id)
+        account = await sync_to_async(get_default_account)(user)
         
         if not account:
             raise HTTPException(status_code=404, detail="No default account")
@@ -119,7 +120,9 @@ async def get_account(
 ):
     """Get specific account."""
     try:
-        account = Account.objects.get(id=account_id, user_id=current_user.user_id)
+        account = await sync_to_async(Account.objects.get)(
+            id=account_id, user_id=current_user.user_id
+        )
         
         return AccountResponse(
             id=account.id,
@@ -146,10 +149,10 @@ async def create_demo_account_endpoint(
 ):
     """Create a new demo account."""
     try:
-        user = User.objects.get(id=current_user.user_id)
+        user = await sync_to_async(User.objects.get)(id=current_user.user_id)
         
         # Create demo account
-        account = create_demo_account(
+        account = await sync_to_async(create_demo_account)(
             user=user,
             currency=request.currency,
             initial_balance=Decimal(request.initial_balance),
@@ -187,15 +190,17 @@ async def set_default_account(
 ):
     """Set an account as default."""
     try:
-        user = User.objects.get(id=current_user.user_id)
-        account = Account.objects.get(id=account_id, user_id=user.id)
+        user = await sync_to_async(User.objects.get)(id=current_user.user_id)
+        account = await sync_to_async(Account.objects.get)(id=account_id, user_id=user.id)
         
         # Unset previous default
-        Account.objects.filter(user=user, is_default=True).update(is_default=False)
+        await sync_to_async(Account.objects.filter(user=user, is_default=True).update)(
+            is_default=False
+        )
         
         # Set new default
         account.is_default = True
-        account.save()
+        await sync_to_async(account.save)()
         
         log_info("Default account changed", user_id=user.id, account_id=account.id)
         
@@ -220,7 +225,9 @@ async def get_account_balance(
 ):
     """Get account balance (real-time from cache if available)."""
     try:
-        account = Account.objects.get(id=account_id, user_id=current_user.user_id)
+        account = await sync_to_async(Account.objects.get)(
+            id=account_id, user_id=current_user.user_id
+        )
         
         return {
             "account_id": account.id,
@@ -243,8 +250,10 @@ async def get_account_balance_live(
 ):
     """Get live balance from Deriv using stored token."""
     try:
-        user = User.objects.get(id=current_user.user_id)
-        account = Account.objects.get(id=account_id, user_id=current_user.user_id)
+        user = await sync_to_async(User.objects.get)(id=current_user.user_id)
+        account = await sync_to_async(Account.objects.get)(
+            id=account_id, user_id=current_user.user_id
+        )
 
         token = None
         if account.metadata:
@@ -265,7 +274,9 @@ async def get_account_balance_live(
         if balance_value is not None:
             account.balance = Decimal(str(balance_value))
             account.currency = str(balance_currency)
-            account.save(update_fields=["balance", "currency", "updated_at"])
+            await sync_to_async(account.save)(
+                update_fields=["balance", "currency", "updated_at"]
+            )
 
         return {
             "account_id": account.id,
