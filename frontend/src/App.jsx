@@ -1,6 +1,6 @@
 import React from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
-import { AuthProvider } from "./features/auth/contexts/AuthContext.jsx";
+import { RootProvider } from "./providers/RootProvider.jsx";
 import { AppLayout } from "./shared/components/layout/AppLayout.jsx";
 import { ProtectedRoute } from "./shared/components/layout/ProtectedRoute.jsx";
 import { publicRoutes, protectedRoutes } from "./router/routes.jsx";
@@ -8,7 +8,7 @@ import { publicRoutes, protectedRoutes } from "./router/routes.jsx";
 export default function App() {
   return (
     <BrowserRouter>
-      <AuthProvider>
+      <RootProvider>
         <Routes>
           {publicRoutes.map((route) => (
             <Route key={route.path} path={route.path} element={route.element} />
@@ -25,7 +25,7 @@ export default function App() {
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
-      </AuthProvider>
+      </RootProvider>
     </BrowserRouter>
   );
 }
