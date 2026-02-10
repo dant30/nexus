@@ -2,19 +2,16 @@
 FastAPI application entry point for Nexus Trading Bot.
 Integrates Django ORM, WebSocket, and trading engine.
 """
-import logging
 import time
 from contextlib import asynccontextmanager
-from typing import Optional
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.authentication import AuthenticationMiddleware
 from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
 
 from shared.database.django import setup_django
-from shared.utils.logger import log_info, log_error, get_logger
+from shared.utils.logger import log_info, log_error
 
 # Initialize Django ORM FIRST
 setup_django()
@@ -26,7 +23,6 @@ from fastapi_app.api import routes
 from fastapi_app.oauth import routes as oauth_routes
 from fastapi_app.deriv_ws.client import DerivWebSocketClient
 
-logger = get_logger("fastapi")
 
 DERIV_SYMBOLS = {
     "R_10",

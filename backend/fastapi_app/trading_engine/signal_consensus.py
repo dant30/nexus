@@ -16,13 +16,13 @@ logger = get_logger("consensus")
 
 class ConsensusDecision(str, Enum):
     """Final trading decision."""
-    STRONG_BUY = "STRONG_BUY"
-    BUY = "BUY"
-    WEAK_BUY = "WEAK_BUY"
+    STRONG_RISE = "STRONG_RISE"
+    RISE = "RISE"
+    WEAK_RISE = "WEAK_RISE"
     NEUTRAL = "NEUTRAL"
-    WEAK_SELL = "WEAK_SELL"
-    SELL = "SELL"
-    STRONG_SELL = "STRONG_SELL"
+    WEAK_FALL = "WEAK_FALL"
+    FALL = "FALL"
+    STRONG_FALL = "STRONG_FALL"
 
 
 @dataclass
@@ -43,16 +43,16 @@ class SignalConsensus:
     Aggregate multiple strategy signals into a single consensus decision.
     
     Voting system:
-    - BUY signal: +1 vote (weighted by confidence)
-    - SELL signal: -1 vote (weighted by confidence)
+    - RISE signal: +1 vote (weighted by confidence)
+    - FALL signal: -1 vote (weighted by confidence)
     - HOLD signal: 0 votes
     
     Final decision:
-    - 2+ strong buy (conf > 0.7): STRONG_BUY
-    - 1+ buy (conf > 0.6): BUY
-    - Net positive: WEAK_BUY
+    - 2+ strong rise (conf > 0.7): STRONG_RISE
+    - 1+ rise (conf > 0.6): RISE
+    - Net positive: WEAK_RISE
     - Net zero: NEUTRAL
-    - Net negative: WEAK_SELL / SELL / STRONG_SELL
+    - Net negative: WEAK_FALL / FALL / STRONG_FALL
     """
     
     def __init__(self, min_agreement: float = 0.0):
@@ -104,11 +104,11 @@ class SignalConsensus:
                 "reason": signal.reason,
             })
             
-            if signal.signal == Signal.BUY:
+            if signal.signal == Signal.RISE:
                 buy_votes += signal.confidence
                 if signal.confidence > 0.7:
                     strong_buy_count += 1
-            elif signal.signal == Signal.SELL:
+            elif signal.signal == Signal.FALL:
                 sell_votes += signal.confidence
                 if signal.confidence > 0.7:
                     strong_sell_count += 1
@@ -126,34 +126,34 @@ class SignalConsensus:
             reason = "No clear signals from strategies"
         
         elif strong_buy_count >= 2 and net_vote > 0:
-            decision = ConsensusDecision.STRONG_BUY
+            decision = ConsensusDecision.STRONG_RISE
             confidence = min((net_vote / max(total_votes, 1)) * 0.95, 0.95)
-            reason = f"Strong buy consensus ({strong_buy_count} strong signals)"
+            reason = f"Strong rise consensus ({strong_buy_count} strong signals)"
         
         elif strong_sell_count >= 2 and net_vote < 0:
-            decision = ConsensusDecision.STRONG_SELL
+            decision = ConsensusDecision.STRONG_FALL
             confidence = min((abs(net_vote) / max(total_votes, 1)) * 0.95, 0.95)
-            reason = f"Strong sell consensus ({strong_sell_count} strong signals)"
+            reason = f"Strong fall consensus ({strong_sell_count} strong signals)"
         
         elif net_vote > total_votes * 0.5:
-            decision = ConsensusDecision.BUY
+            decision = ConsensusDecision.RISE
             confidence = min(net_vote / max(total_votes, 1), 0.9)
-            reason = f"Buy consensus ({len([s for s in signals if s.signal == Signal.BUY])} buy signals)"
+            reason = f"Rise consensus ({len([s for s in signals if s.signal == Signal.RISE])} rise signals)"
         
         elif net_vote < -total_votes * 0.5:
-            decision = ConsensusDecision.SELL
+            decision = ConsensusDecision.FALL
             confidence = min(abs(net_vote) / max(total_votes, 1), 0.9)
-            reason = f"Sell consensus ({len([s for s in signals if s.signal == Signal.SELL])} sell signals)"
+            reason = f"Fall consensus ({len([s for s in signals if s.signal == Signal.FALL])} fall signals)"
         
         elif net_vote > 0:
-            decision = ConsensusDecision.WEAK_BUY
+            decision = ConsensusDecision.WEAK_RISE
             confidence = net_vote / max(total_votes, 1) * 0.5
-            reason = "Weak buy signal"
+            reason = "Weak rise signal"
         
         elif net_vote < 0:
-            decision = ConsensusDecision.WEAK_SELL
+            decision = ConsensusDecision.WEAK_FALL
             confidence = abs(net_vote) / max(total_votes, 1) * 0.5
-            reason = "Weak sell signal"
+            reason = "Weak fall signal"
         
         else:
             decision = ConsensusDecision.NEUTRAL

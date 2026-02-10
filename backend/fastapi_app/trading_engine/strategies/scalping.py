@@ -17,8 +17,8 @@ class ScalpingStrategy(BaseStrategy):
     - Small profit targets, tight stops
     
     Signals:
-    - BUY: Price touches lower Bollinger Band
-    - SELL: Price touches upper Bollinger Band
+    - RISE: Price touches lower Bollinger Band
+    - FALL: Price touches upper Bollinger Band
     
     Risk Profile:
     - High frequency, small wins
@@ -96,7 +96,7 @@ class ScalpingStrategy(BaseStrategy):
             )
             
             return StrategySignal(
-                signal=Signal.BUY,
+                signal=Signal.RISE,
                 confidence=confidence,
                 reason=f"Price at lower band ({lower_band:.5f}), ticking up",
                 timestamp=datetime.utcnow().isoformat(),
@@ -121,7 +121,7 @@ class ScalpingStrategy(BaseStrategy):
             )
             
             return StrategySignal(
-                signal=Signal.SELL,
+                signal=Signal.FALL,
                 confidence=confidence,
                 reason=f"Price at upper band ({upper_band:.5f}), ticking down",
                 timestamp=datetime.utcnow().isoformat(),
@@ -140,7 +140,7 @@ class ScalpingStrategy(BaseStrategy):
             reason = f"Price below lower band, mean reversion expected"
             
             return StrategySignal(
-                signal=Signal.BUY,
+                signal=Signal.RISE,
                 confidence=confidence,
                 reason=reason,
                 timestamp=datetime.utcnow().isoformat(),
@@ -158,7 +158,7 @@ class ScalpingStrategy(BaseStrategy):
             reason = f"Price above upper band, mean reversion expected"
             
             return StrategySignal(
-                signal=Signal.SELL,
+                signal=Signal.FALL,
                 confidence=confidence,
                 reason=reason,
                 timestamp=datetime.utcnow().isoformat(),

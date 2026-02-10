@@ -17,8 +17,8 @@ class MomentumStrategy(BaseStrategy):
     - Strong trend following strategy
     
     Signals:
-    - BUY: RSI < 30 (oversold) + MACD bullish
-    - SELL: RSI > 70 (overbought) + MACD bearish
+    - RISE: RSI < 30 (oversold) + MACD bullish
+    - FALL: RSI > 70 (overbought) + MACD bearish
     
     Confidence:
     - High (0.8-1.0): RSI + MACD agree strongly
@@ -85,7 +85,7 @@ class MomentumStrategy(BaseStrategy):
             )
             
             return StrategySignal(
-                signal=Signal.BUY,
+                signal=Signal.RISE,
                 confidence=confidence,
                 reason=reason,
                 timestamp=datetime.utcnow().isoformat(),
@@ -112,7 +112,7 @@ class MomentumStrategy(BaseStrategy):
             )
             
             return StrategySignal(
-                signal=Signal.SELL,
+                signal=Signal.FALL,
                 confidence=confidence,
                 reason=reason,
                 timestamp=datetime.utcnow().isoformat(),
@@ -128,11 +128,11 @@ class MomentumStrategy(BaseStrategy):
             if macd_data:
                 if macd_data["histogram"] > 0:
                     reason = "Neutral RSI, MACD bullish"
-                    signal = Signal.BUY
+                    signal = Signal.RISE
                     confidence = 0.5
                 elif macd_data["histogram"] < 0:
                     reason = "Neutral RSI, MACD bearish"
-                    signal = Signal.SELL
+                    signal = Signal.FALL
                     confidence = 0.5
                 else:
                     reason = "No clear momentum signal"

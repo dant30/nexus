@@ -15,8 +15,8 @@ logger = get_logger("strategies")
 
 class Signal(str, Enum):
     """Trading signal types."""
-    BUY = "BUY"
-    SELL = "SELL"
+    RISE = "RISE"
+    FALL = "FALL"
     HOLD = "HOLD"
     NEUTRAL = "NEUTRAL"
 

@@ -167,9 +167,9 @@ class TradingEngine:
                 }
             
             # Get trade direction from consensus
-            if "BUY" in consensus.decision.value:
+            if "RISE" in consensus.decision.value:
                 direction = "RISE"
-            elif "SELL" in consensus.decision.value:
+            elif "FALL" in consensus.decision.value:
                 direction = "FALL"
             else:
                 return {

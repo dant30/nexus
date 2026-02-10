@@ -73,7 +73,7 @@ class BreakoutStrategy(BaseStrategy):
             )
             
             return StrategySignal(
-                signal=Signal.BUY,
+                signal=Signal.RISE,
                 confidence=confidence,
                 reason=f"Breakout above resistance {resistance:.5f}",
                 timestamp=datetime.utcnow().isoformat(),
@@ -100,7 +100,7 @@ class BreakoutStrategy(BaseStrategy):
             )
             
             return StrategySignal(
-                signal=Signal.SELL,
+                signal=Signal.FALL,
                 confidence=confidence,
                 reason=f"Breakout below support {support:.5f}",
                 timestamp=datetime.utcnow().isoformat(),
