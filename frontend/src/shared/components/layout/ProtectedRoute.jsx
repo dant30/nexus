@@ -1,21 +1,16 @@
 import React from "react";
-import { Navigate, Outlet } from "react-router-dom";
+import { Navigate } from "react-router-dom";
 import { useAuth } from "../../../features/auth/contexts/AuthContext.jsx";
 
-export function ProtectedRoute() {
-  const { isAuthenticated, loading } = useAuth();
+/**
+ * ProtectedRoute - Guards routes behind authentication
+ */
+export function ProtectedRoute({ children }) {
+  const { isAuthenticated, user } = useAuth();
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-ink text-white flex items-center justify-center">
-        <span className="text-sm text-white/60">Checking session...</span>
-      </div>
-    );
-  }
-
-  if (!isAuthenticated) {
+  if (!isAuthenticated || !user) {
     return <Navigate to="/login" replace />;
   }
 
-  return <Outlet />;
+  return children;
 }
