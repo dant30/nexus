@@ -8,13 +8,13 @@ export function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
-    <div className="min-h-screen bg-ink text-white flex flex-col">
+    <div className="flex min-h-screen flex-col bg-ink text-white">
       <Navbar onMenuClick={() => setSidebarOpen(true)} />
 
-      <div className="relative mx-auto flex w-full max-w-7xl flex-1 gap-6 px-4 sm:px-6 py-6">
+      <div className="relative mx-auto flex w-full max-w-7xl flex-1 gap-6 px-4 py-6 sm:px-6 lg:px-8">
         <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-        <main className="flex-1 rounded-2xl border border-white/10 bg-white/5 p-4 sm:p-6 shadow-soft">
+        <main className="flex-1 rounded-2xl border border-white/10 bg-white/5 p-4 shadow-soft sm:p-6">
           <Outlet />
         </main>
       </div>

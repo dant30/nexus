@@ -1,13 +1,13 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
-import { Bell, ChevronDown, LogOut, Settings, User } from "lucide-react";
+import { Bell, ChevronDown, LogOut, Menu, Settings, User } from "lucide-react";
 
 import { useAuth } from "../../../features/auth/contexts/AuthContext.jsx";
 import { useAuthActions } from "../../../features/auth/hooks/useAuth.js";
 import { useBalance } from "../../../features/accounts/hooks/useBalance.js";
 import { useAccountContext } from "../../../features/accounts/contexts/AccountContext.jsx";
 
-export function Navbar() {
+export function Navbar({ onMenuClick }) {
   const { user, isAuthenticated } = useAuth();
   const { signOut } = useAuthActions();
   const { accountType, accountId } = useBalance();
@@ -33,29 +33,34 @@ export function Navbar() {
 
   return (
     <header className="sticky top-0 z-40 border-b border-white/10 bg-slate/80 backdrop-blur">
-      <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-        {/* Brand */}
-        <div>
-          <p className="text-xs uppercase tracking-[0.3em] text-white/50">
-            Nexus
-          </p>
-          <Link to="/dashboard" className="text-lg font-semibold">
-            Trading Console
-          </Link>
+      <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={onMenuClick}
+            className="rounded-full border border-white/10 p-2 text-white/70 transition hover:border-white/30 hover:text-white sm:hidden"
+            aria-label="Open navigation"
+          >
+            <Menu size={18} />
+          </button>
+          <div>
+            <p className="text-xs uppercase tracking-[0.3em] text-white/50">
+              Nexus
+            </p>
+            <Link to="/dashboard" className="text-lg font-semibold">
+              Trading Console
+            </Link>
+          </div>
         </div>
 
-        {/* Right section */}
         <div className="flex items-center gap-4">
           {isAuthenticated && (
             <>
-              {/* 🔔 Notifications */}
               <button className="relative rounded-full border border-white/10 p-2 text-white/70 transition hover:border-white/30 hover:text-white">
                 <Bell size={16} />
-                {/* unread indicator */}
                 <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-accent" />
               </button>
 
-              {/* 🧾 Account Switcher */}
               <div className="relative">
                 <button
                   onClick={() => setOpenAccountMenu((v) => !v)}
@@ -88,9 +93,7 @@ export function Navbar() {
                               : "text-white/70 hover:bg-white/5"
                           }`}
                         >
-                          <span>
-                            {account.deriv_account_id || account.id}
-                          </span>
+                          <span>{account.deriv_account_id || account.id}</span>
                           <span className="text-xs text-white/40">
                             {account.account_type} · {account.currency}
                           </span>
@@ -101,7 +104,6 @@ export function Navbar() {
                 )}
               </div>
 
-              {/* 👤 User Menu */}
               <div className="relative">
                 <button
                   onClick={() => setOpenUserMenu((v) => !v)}
