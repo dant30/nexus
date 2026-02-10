@@ -1,5 +1,6 @@
 import React from "react";
+import { TradingDashboard as TradingFeatureDashboard } from "../../trading/pages/TradingDashboard.jsx";
 
 export function TradingDashboard() {
-  return <div className="p-6 text-white">Trading Dashboard</div>;
+  return <TradingFeatureDashboard />;
 }

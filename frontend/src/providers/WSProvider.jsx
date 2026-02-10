@@ -8,11 +8,13 @@ import React, { createContext, useState, useCallback, useEffect } from "react";
 import { wsManager } from "../core/ws/wsManager.js";
 import { WS_ENDPOINTS } from "../core/constants/api.js";
 import { useAuth } from "../features/auth/contexts/AuthContext.jsx";
+import { useAccountContext } from "../features/accounts/contexts/AccountContext.jsx";
 
 export const WSContext = createContext(null);
 
 export function WSProvider({ children }) {
   const { user } = useAuth();
+  const { activeAccount } = useAccountContext();
   const [wsState, setWSState] = useState({
     connected: false,
     error: null,
@@ -20,11 +22,9 @@ export function WSProvider({ children }) {
 
   // Connect WebSocket when user is authenticated
   useEffect(() => {
-    if (!user) return;
+    if (!user || !activeAccount?.id) return;
 
-    // Get user's default account (would need to fetch)
-    const accountId = 1; // TODO: Get actual default account
-    const wsUrl = WS_ENDPOINTS.TRADING(user.id, accountId);
+    const wsUrl = WS_ENDPOINTS.TRADING(user.id, activeAccount.id);
 
     wsManager
       .connect(wsUrl)
@@ -48,9 +48,9 @@ export function WSProvider({ children }) {
 
     return () => {
       unsubscribe();
-      // Don't disconnect on unmount to keep connection alive for other components
+      wsManager.disconnect();
     };
-  }, [user]);
+  }, [user, activeAccount?.id]);
 
   const subscribeTick = useCallback((symbol) => {
     return wsManager.subscribeTicks(symbol);
