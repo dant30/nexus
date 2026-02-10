@@ -3,7 +3,6 @@ FastAPI application entry point for Nexus Trading Bot.
 Integrates Django ORM, WebSocket, and trading engine.
 """
 import logging
-import asyncio
 import time
 from contextlib import asynccontextmanager
 from typing import Optional
@@ -56,6 +55,44 @@ async def lifespan(app: FastAPI):
         log_error("Ã¢ÂÅ’ Django setup failed", exception=e)
         raise
     
+
+    if settings.DERIV_API_KEY:
+        app.state.deriv_client = DerivWebSocketClient(
+            settings.DERIV_APP_ID,
+            settings.DERIV_API_KEY,
+        )
+
+        async def _deriv_callback(payload):
+            if not payload or "symbol" not in payload:
+                return
+            symbol = payload["symbol"]
+            app.state.market_ticks.setdefault(symbol, []).append(payload)
+            app.state.market_ticks[symbol] = app.state.market_ticks[symbol][-600:]
+
+            for connection_id, subscriptions in app.state.ws_subscriptions.items():
+                subscription = subscriptions.get(symbol)
+                if not subscription:
+                    continue
+                subscription["ticks"].append(payload)
+                subscription["ticks"] = subscription["ticks"][-600:]
+                websocket = app.state.ws_connections.get(connection_id)
+                if not websocket:
+                    continue
+                await _send_event(websocket, "tick", payload)
+
+                interval = subscription.get("interval", 60)
+                now = payload.get("time", int(time.time()))
+                if now - subscription["last_candle"] >= interval:
+                    candles = _build_candles(subscription["ticks"], interval, count=1)
+                    if candles:
+                        await _send_event(websocket, "candle", candles[-1])
+                        subscription["last_candle"] = now
+
+        app.state.deriv_client.on_message(_deriv_callback)
+        await app.state.deriv_client.connect()
+    else:
+        log_info("Deriv API key not configured; WS market stream disabled.")
+
     yield
     
     # Shutdown
@@ -65,6 +102,8 @@ async def lifespan(app: FastAPI):
         for connection in AppState.ws_connections.values():
             await connection.close()
         log_info("Ã¢Å“â€¦ WebSocket connections closed")
+        if app.state.deriv_client:
+            await app.state.deriv_client.disconnect()
     except Exception as e:
         log_error("Ã¢ÂÅ’ Shutdown error", exception=e)
 
@@ -201,31 +240,6 @@ app.include_router(oauth_routes.router, prefix="/api/v1/oauth", tags=["OAuth"])
 # ============================================================================
 from fastapi import WebSocket, WebSocketDisconnect
 
-def _get_tick_state(symbol: str) -> dict:
-    state = app.state.ws_tick_state.get(symbol)
-    if not state:
-        seed = sum(ord(char) for char in symbol) % 100
-        price = 1.0 + seed / 1000
-        state = {"price": price, "updated": time.time()}
-        app.state.ws_tick_state[symbol] = state
-    return state
-
-
-def _next_tick(symbol: str) -> dict:
-    state = _get_tick_state(symbol)
-    drift = random.uniform(-0.0006, 0.0006)
-    price = max(0.0001, state["price"] + drift)
-    state["price"] = price
-    state["updated"] = time.time()
-    return {
-        "symbol": symbol,
-        "price": round(price, 6),
-        "bid": round(price - 0.0001, 6),
-        "ask": round(price + 0.0001, 6),
-        "time": int(state["updated"]),
-    }
-
-
 def _build_candles(ticks, interval: int, count: int = 60):
     if not ticks:
         return []
@@ -252,7 +266,7 @@ def _build_candles(ticks, interval: int, count: int = 60):
     return list(sorted(buckets.values(), key=lambda c: c["time"]))[-count:]
 
 
-def _signal_from_ticks(symbol: str, ticks: list):
+def _signal_from_ticks(symbol: str, ticks: list, interval: int):
     if len(ticks) < 5:
         return None
     first = float(ticks[0]["price"])
@@ -260,45 +274,19 @@ def _signal_from_ticks(symbol: str, ticks: list):
     direction = "RISE" if last >= first else "FALL"
     move = abs(last - first)
     confidence = min(0.95, max(0.55, move * 800))
+    minutes = max(1, int(interval / 60))
     return {
         "id": f"sig-{symbol}-{ticks[-1]['time']}",
         "symbol": symbol,
         "direction": direction,
         "confidence": round(confidence, 2),
-        "timeframe": "live",
+        "timeframe": f"{minutes}m",
         "source": "WS Engine",
     }
 
 
 async def _send_event(websocket: WebSocket, event_type: str, data):
     await websocket.send_json({"type": event_type, "data": data})
-
-
-async def _tick_stream(connection_id: str, websocket: WebSocket, symbol: str, interval: int):
-    cache_key = f"{connection_id}:{symbol}"
-    app.state.ws_subscriptions.setdefault(connection_id, {})[symbol] = {
-        "interval": interval,
-        "ticks": [],
-        "last_candle": 0,
-    }
-
-    while connection_id in app.state.ws_connections:
-        subscription = app.state.ws_subscriptions.get(connection_id, {}).get(symbol)
-        if not subscription:
-            break
-        tick = _next_tick(symbol)
-        subscription["ticks"].append(tick)
-        subscription["ticks"] = subscription["ticks"][-600:]
-        await _send_event(websocket, "tick", tick)
-
-        now = tick["time"]
-        if now - subscription["last_candle"] >= interval:
-            candles = _build_candles(subscription["ticks"], interval, count=1)
-            if candles:
-                await _send_event(websocket, "candle", candles[-1])
-                subscription["last_candle"] = now
-
-        await asyncio.sleep(1)
 
 
 @app.websocket("/ws/trading/{user_id}/{account_id}")
@@ -334,11 +322,6 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, account_id: int
     except WebSocketDisconnect:
         if connection_id in app.state.ws_connections:
             del app.state.ws_connections[connection_id]
-        for key in list(app.state.ws_tasks.keys()):
-            if key[0] == connection_id:
-                task = app.state.ws_tasks.pop(key, None)
-                if task:
-                    task.cancel()
         app.state.ws_subscriptions.pop(connection_id, None)
         log_info(
             "WebSocket disconnected",
@@ -355,11 +338,6 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, account_id: int
         )
         if connection_id in app.state.ws_connections:
             del app.state.ws_connections[connection_id]
-        for key in list(app.state.ws_tasks.keys()):
-            if key[0] == connection_id:
-                task = app.state.ws_tasks.pop(key, None)
-                if task:
-                    task.cancel()
         app.state.ws_subscriptions.pop(connection_id, None)
 
 
@@ -375,20 +353,19 @@ async def handle_ws_message(websocket: WebSocket, user_id: int, account_id: int,
         if not symbol:
             return
         connection_id = f"{user_id}_{account_id}"
-        task_key = (connection_id, symbol)
-        if task_key in app.state.ws_tasks:
-            return
-        task = asyncio.create_task(_tick_stream(connection_id, websocket, symbol, interval))
-        app.state.ws_tasks[task_key] = task
+        app.state.ws_subscriptions.setdefault(connection_id, {})[symbol] = {
+            "interval": interval,
+            "ticks": app.state.market_ticks.get(symbol, [])[-600:],
+            "last_candle": 0,
+        }
+        if app.state.deriv_client and symbol not in app.state.deriv_subscriptions:
+            await app.state.deriv_client.subscribe_ticks(symbol)
+            app.state.deriv_subscriptions.add(symbol)
         
     elif event_type == "unsubscribe":
         symbol = data.get("symbol")
         log_info(f"Unsubscribe from {symbol}", user_id=user_id)
         connection_id = f"{user_id}_{account_id}"
-        task_key = (connection_id, symbol)
-        task = app.state.ws_tasks.pop(task_key, None)
-        if task:
-            task.cancel()
         if connection_id in app.state.ws_subscriptions:
             app.state.ws_subscriptions[connection_id].pop(symbol, None)
 
@@ -397,9 +374,7 @@ async def handle_ws_message(websocket: WebSocket, user_id: int, account_id: int,
         interval = int(data.get("interval") or 60)
         connection_id = f"{user_id}_{account_id}"
         subscription = app.state.ws_subscriptions.get(connection_id, {}).get(symbol)
-        ticks = subscription["ticks"] if subscription else []
-        if not ticks:
-            ticks = [_next_tick(symbol) for _ in range(30)]
+        ticks = subscription["ticks"] if subscription else app.state.market_ticks.get(symbol, [])
         candles = _build_candles(ticks, interval, count=60)
         await _send_event(websocket, "candles", candles)
 
@@ -408,7 +383,7 @@ async def handle_ws_message(websocket: WebSocket, user_id: int, account_id: int,
         subscriptions = app.state.ws_subscriptions.get(connection_id, {})
         signals = []
         for symbol, sub in subscriptions.items():
-            signal = _signal_from_ticks(symbol, sub.get("ticks", []))
+            signal = _signal_from_ticks(symbol, sub.get("ticks", []), sub.get("interval", 60))
             if signal:
                 signals.append(signal)
         await _send_event(websocket, "signals", signals)

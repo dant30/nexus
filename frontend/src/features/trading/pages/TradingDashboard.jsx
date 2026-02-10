@@ -5,6 +5,7 @@ import { SignalsMonitor } from "./SignalsMonitor.jsx";
 import { OpenTrades } from "../components/TradeHistory/OpenTrades.jsx";
 import { ClosedTrades } from "../components/TradeHistory/ClosedTrades.jsx";
 import { TradeStats } from "../components/TradeHistory/TradeStats.jsx";
+import { WSStatusBanner } from "../components/WSStatusBanner.jsx";
 
 const tabs = [
   { id: "manual", label: "Manual" },
@@ -21,6 +22,7 @@ export function TradingDashboard() {
         <h2 className="text-xl font-semibold">Trading Dashboard</h2>
         <p className="text-sm text-white/60">Execute trades and monitor live signals.</p>
       </div>
+      <WSStatusBanner />
 
       <div className="flex flex-wrap gap-2">
         {tabs.map((tab) => (

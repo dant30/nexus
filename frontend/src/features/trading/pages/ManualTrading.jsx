@@ -16,19 +16,20 @@ import { PriceChart } from "../components/Charts/PriceChart.jsx";
 import { CandlestickChart } from "../components/Charts/CandlestickChart.jsx";
 import { TickChart } from "../components/Charts/TickChart.jsx";
 import { Select } from "../../../shared/components/ui/inputs/Select.jsx";
+import { useTradingContext } from "../contexts/TradingContext.jsx";
 
 export function ManualTrading() {
   const [market, setMarket] = useState("EURUSD");
   const [contractType, setContractType] = useState("CALL");
   const [direction, setDirection] = useState("RISE");
   const [stake, setStake] = useState(TRADING.DEFAULT_STAKE);
-  const [timeframe, setTimeframe] = useState(60);
+  const { timeframeSeconds, setTimeframeSeconds } = useTradingContext();
 
   const { signals } = useSignals();
   const { isStakeValid } = useRiskCalculator();
   const { execute, loading, error, lastTrade } = useTrading();
   const { activeAccount } = useAccountContext();
-  const { data: marketData } = useMarketData(market, timeframe);
+  const { data: marketData } = useMarketData(market, timeframeSeconds);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pendingTrade, setPendingTrade] = useState(null);
 
@@ -77,7 +78,10 @@ export function ManualTrading() {
           />
           <div>
             <label className="mb-1 block text-xs font-semibold text-white/70">Timeframe</label>
-            <Select value={timeframe} onChange={(event) => setTimeframe(Number(event.target.value))}>
+            <Select
+              value={timeframeSeconds}
+              onChange={(event) => setTimeframeSeconds(Number(event.target.value))}
+            >
               <option value={60}>1 minute</option>
               <option value={300}>5 minutes</option>
               <option value={900}>15 minutes</option>

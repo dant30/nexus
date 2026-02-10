@@ -7,10 +7,13 @@ import { TradeButton } from "../components/TradePanel/TradeButton.jsx";
 import { useBot } from "../hooks/useBot.js";
 import { useBotContext } from "../contexts/BotContext.jsx";
 import { Card } from "../../../shared/components/ui/cards/Card.jsx";
+import { Select } from "../../../shared/components/ui/inputs/Select.jsx";
+import { useTradingContext } from "../contexts/TradingContext.jsx";
 
 export function AutoTrading() {
   const { start, stop } = useBot();
   const { running, setRunning, strategy, setStrategy, setLastEvent } = useBotContext();
+  const { timeframeSeconds, setTimeframeSeconds } = useTradingContext();
   const [stake, setStake] = useState(5);
   const [dailyLimit, setDailyLimit] = useState(50);
 
@@ -32,6 +35,17 @@ export function AutoTrading() {
         <Card className="space-y-4">
           <div className="text-sm font-semibold text-white/80">Auto Trading</div>
           <StrategySelector value={strategy} onChange={setStrategy} />
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-white/70">Signal Timeframe</label>
+            <Select
+              value={timeframeSeconds}
+              onChange={(event) => setTimeframeSeconds(Number(event.target.value))}
+            >
+              <option value={60}>1 minute</option>
+              <option value={300}>5 minutes</option>
+              <option value={900}>15 minutes</option>
+            </Select>
+          </div>
           <StakeSettings value={stake} onChange={setStake} />
           <RiskLimits value={dailyLimit} onChange={setDailyLimit} />
           <TradeButton

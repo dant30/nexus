@@ -4,7 +4,7 @@
  * Manages WebSocket connections for real-time updates
  */
 
-import React, { createContext, useState, useCallback, useEffect } from "react";
+import React, { createContext, useState, useCallback, useEffect, useRef } from "react";
 import { wsManager } from "../core/ws/wsManager.js";
 import { WS_ENDPOINTS } from "../core/constants/api.js";
 import { useAuth } from "../features/auth/contexts/AuthContext.jsx";
@@ -15,6 +15,7 @@ export const WSContext = createContext(null);
 export function WSProvider({ children }) {
   const { user } = useAuth();
   const { activeAccount } = useAccountContext();
+  const wsUrlRef = useRef(null);
   const [wsState, setWSState] = useState({
     connected: false,
     error: null,
@@ -25,6 +26,7 @@ export function WSProvider({ children }) {
     if (!user || !activeAccount?.id) return;
 
     const wsUrl = WS_ENDPOINTS.TRADING(user.id, activeAccount.id);
+    wsUrlRef.current = wsUrl;
 
     wsManager
       .connect(wsUrl)
@@ -68,12 +70,24 @@ export function WSProvider({ children }) {
     return wsManager.on(type, handler);
   }, []);
 
+  const reconnect = useCallback(async () => {
+    if (!wsUrlRef.current) return;
+    wsManager.disconnect();
+    try {
+      await wsManager.connect(wsUrlRef.current);
+      setWSState({ connected: true, error: null });
+    } catch (error) {
+      setWSState({ connected: false, error });
+    }
+  }, []);
+
   const value = {
     ...wsState,
     subscribeTick,
     unsubscribeTick,
     sendMessage,
     onMessage,
+    reconnect,
     getStats: () => wsManager.getStats(),
   };
 
