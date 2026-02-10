@@ -63,7 +63,18 @@ class ScalpingStrategy(BaseStrategy):
         current_price = closes[-1]
         
         # Get recent ticks for micro-trends
-        recent_ticks = [float(t) for t in ticks[-5:]]
+        recent_ticks = [
+            float(t.get("price")) if isinstance(t, dict) else float(t)
+            for t in ticks[-5:]
+            if (t.get("price") if isinstance(t, dict) else t) is not None
+        ]
+        if len(recent_ticks) < 2:
+            return StrategySignal(
+                signal=Signal.HOLD,
+                confidence=0.0,
+                reason="Not enough tick data",
+                timestamp=datetime.utcnow().isoformat(),
+            )
         tick_trend = recent_ticks[-1] - recent_ticks[0]  # Latest tick direction
         
         # Calculate Bollinger Bands

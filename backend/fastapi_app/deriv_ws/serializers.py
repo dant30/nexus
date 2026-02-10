@@ -361,6 +361,23 @@ class DerivSerializer:
         except Exception as e:
             log_error("Failed to deserialize balance", exception=e)
             return None
+
+    @staticmethod
+    def deserialize_authorize(data: Dict[str, Any]) -> Optional[Dict]:
+        """Deserialize authorize response from Deriv."""
+        try:
+            if "authorize" not in data:
+                return None
+            auth = data.get("authorize", {})
+            return {
+                "event": "authorize",
+                "user_id": auth.get("user_id"),
+                "loginid": auth.get("loginid"),
+                "raw": data,
+            }
+        except Exception as e:
+            log_error("Failed to deserialize authorize", exception=e)
+            return None
     
     @staticmethod
     def deserialize_proposal(data: Dict[str, Any]) -> Optional[Dict]:

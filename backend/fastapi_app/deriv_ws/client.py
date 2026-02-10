@@ -95,10 +95,15 @@ class DerivWebSocketClient:
             request = {
                 "authorize": self.api_token,
             }
-            
-            await self.send(request)
+            if self.ws is None:
+                return False
+            await self.ws.send(json.dumps(request))
+            auth_event = await self.wait_for_event("authorize", timeout=10)
+            if not auth_event:
+                log_error("Authorization timeout")
+                return False
             self.status = WebSocketStatus.AUTHORIZED
-            
+            await self._flush_queue()
             log_info("Authorized with Deriv")
             return True
         
@@ -180,6 +185,17 @@ class DerivWebSocketClient:
             log_error("Failed to send message", exception=e)
             self.message_queue.append(data)
             return False
+
+    async def _flush_queue(self):
+        if not self.message_queue:
+            return
+        queued = list(self.message_queue)
+        self.message_queue.clear()
+        for item in queued:
+            try:
+                await self.send(item)
+            except Exception as e:
+                log_error("Failed to flush message", exception=e)
     
     async def _message_loop(self):
         """

@@ -24,6 +24,7 @@ class DerivEventHandler:
             DerivEventType.CANDLE: self._handle_ohlc,
             DerivEventType.BUY: self._handle_buy,
             DerivEventType.PROPOSAL_OPEN_CONTRACT: self._handle_open_contract,
+            DerivEventType.AUTHORIZE: self._handle_authorize,
         }
     
     async def handle_message(self, message: Dict[str, Any]) -> Optional[Dict]:
@@ -44,6 +45,8 @@ class DerivEventHandler:
                 return await self._handle_ohlc(message)
             elif "candles" in message:
                 return await self._handle_candles(message)
+            elif "authorize" in message:
+                return await self._handle_authorize(message)
             elif "balance" in message:
                 return await self._handle_balance(message)
             elif "proposal"in message:
@@ -101,6 +104,13 @@ class DerivEventHandler:
         if proposal:
             log_info(f"Proposal received: {proposal['id']} @ {proposal['ask_price']}")
         return proposal
+
+    async def _handle_authorize(self, data: Dict[str, Any]) -> Optional[Dict]:
+        """Handle authorize response."""
+        auth = DerivSerializer.deserialize_authorize(data)
+        if auth:
+            log_info("Deriv authorization confirmed", loginid=auth.get("loginid"))
+        return auth
 
     async def _handle_buy(self, data: Dict[str, Any]) -> Optional[Dict]:
         """Handle buy response."""
