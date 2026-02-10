@@ -1,18 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useWebSocket } from "../../../providers/WSProvider.jsx";
 
-const MAX_TICKS = 240;
-const MAX_CANDLES = 60;
-const CANDLE_INTERVAL = 60;
+const MAX_TICKS = 360;
+const MAX_CANDLES = 120;
 
-const buildCandles = (ticks) => {
+const buildCandles = (ticks, interval) => {
   if (!ticks?.length) return [];
   const buckets = new Map();
 
   ticks.forEach((tick) => {
     const time = Number(tick.time);
     if (!time) return;
-    const bucketKey = Math.floor(time / CANDLE_INTERVAL) * CANDLE_INTERVAL;
+    const bucketKey = Math.floor(time / interval) * interval;
     const price = Number(tick.price);
     if (!buckets.has(bucketKey)) {
       buckets.set(bucketKey, {
@@ -35,8 +34,8 @@ const buildCandles = (ticks) => {
     .slice(-MAX_CANDLES);
 };
 
-export const useMarketData = (symbol) => {
-  const { subscribeTick, unsubscribeTick, onMessage, connected } = useWebSocket();
+export const useMarketData = (symbol, timeframeSeconds = 60) => {
+  const { subscribeTick, unsubscribeTick, onMessage, connected, sendMessage } = useWebSocket();
   const [ticks, setTicks] = useState([]);
   const [error, setError] = useState(null);
 
@@ -60,6 +59,19 @@ export const useMarketData = (symbol) => {
   const handleCandle = useCallback(
     (payload, message) => {
       const raw = payload?.candle || payload || message;
+      if (Array.isArray(raw)) {
+        const normalized = raw
+          .filter((entry) => entry?.symbol === symbol)
+          .map((entry) => ({
+            symbol: entry.symbol,
+            price: Number(entry.close ?? entry.price ?? 0),
+            time: Number(entry.time ?? entry.epoch ?? Math.floor(Date.now() / 1000)),
+          }))
+          .filter((entry) => entry.price);
+        if (!normalized.length) return;
+        setTicks((prev) => [...prev, ...normalized].slice(-MAX_TICKS));
+        return;
+      }
       if (!raw?.symbol || raw.symbol !== symbol) return;
       const candleTick = {
         symbol: raw.symbol,
@@ -74,20 +86,34 @@ export const useMarketData = (symbol) => {
 
   useEffect(() => {
     if (!symbol || !connected) return;
-    subscribeTick(symbol);
+    const interval = timeframeSeconds || 60;
+    subscribeTick(symbol, { interval });
+    sendMessage("market_snapshot", { symbol, interval });
     const offTick = onMessage("tick", handleTick);
     const offCandles = onMessage("candles", handleCandle);
     const offCandle = onMessage("candle", handleCandle);
 
     return () => {
-      unsubscribeTick(symbol);
+      unsubscribeTick(symbol, { interval });
       offTick?.();
       offCandles?.();
       offCandle?.();
     };
-  }, [symbol, connected, subscribeTick, unsubscribeTick, onMessage, handleTick, handleCandle]);
+  }, [
+    symbol,
+    timeframeSeconds,
+    connected,
+    subscribeTick,
+    unsubscribeTick,
+    onMessage,
+    handleTick,
+    handleCandle,
+  ]);
 
-  const candles = useMemo(() => buildCandles(ticks), [ticks]);
+  const candles = useMemo(
+    () => buildCandles(ticks, timeframeSeconds || 60),
+    [ticks, timeframeSeconds]
+  );
   const data = useMemo(() => ({ symbol, ticks, candles }), [symbol, ticks, candles]);
 
   return { data, loading: !connected, error };

@@ -209,15 +209,15 @@ class WebSocketManager {
   /**
    * Subscribe to market ticks
    */
-  subscribeTicks(symbol) {
-    return this.send("subscribe", { type: "subscribe", symbol });
+  subscribeTicks(symbol, options = {}) {
+    return this.send("subscribe", { type: "subscribe", symbol, ...options });
   }
 
   /**
    * Unsubscribe from ticks
    */
-  unsubscribeTicks(symbol) {
-    return this.send("unsubscribe", { type: "unsubscribe", symbol });
+  unsubscribeTicks(symbol, options = {}) {
+    return this.send("unsubscribe", { type: "unsubscribe", symbol, ...options });
   }
 
   /**
