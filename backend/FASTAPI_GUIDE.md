@@ -105,7 +105,6 @@ DERIV_OAUTH_CALLBACK_URL=http://localhost:3000/oauth/callback
 3. **Signup** (`POST /api/v1/auth/signup`)
    - Username, email, password
    - Optional referral code
-   - Auto-creates demo account ($10K)
 
 ### Middleware Pipeline
 ```

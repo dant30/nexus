@@ -49,10 +49,8 @@ class TestAuthenticationFlow:
         assert user.email == "testuser@example.com"
         assert user.is_active
         
-        # Verify demo account was auto-created
-        demo_account = Account.objects.get(user=user, account_type="DEMO")
-        assert demo_account.balance == Decimal("10000.00")
-        assert demo_account.is_default
+        # Verify no local demo account is auto-created
+        assert not Account.objects.filter(user=user, account_type="DEMO").exists()
     
     def test_login_flow(self):
         """Test user login and token generation."""

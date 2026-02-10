@@ -13,6 +13,31 @@ export function SignalDisplay({ signal }) {
     );
   }
 
+  const isNeutral =
+    signal.direction === "NEUTRAL" || signal?.consensus?.decision === "NEUTRAL";
+
+  if (isNeutral) {
+    return (
+      <Card>
+        <CardHeader className="text-white/70">Signal</CardHeader>
+        <CardBody className="text-white/60">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold text-white">{signal.symbol}</p>
+              <p className="text-xs text-white/60">
+                No clear signal â€¢ {signal.timeframe}
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-sm font-semibold text-white/40">â€”</p>
+              <p className="text-xs text-white/60">{signal.source}</p>
+            </div>
+          </div>
+        </CardBody>
+      </Card>
+    );
+  }
+
   return (
     <Card>
       <CardHeader className="text-white/70">Signal</CardHeader>

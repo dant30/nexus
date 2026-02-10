@@ -246,7 +246,7 @@ path("api/v1/trades/", include("trades.urls")),
 
 ### accounts/signals.py
 **Signals:**
-- `create_default_demo_account` (post_save on User) - Auto-create demo account
+- No automatic demo-account creation (accounts created explicitly)
 
 ---
 

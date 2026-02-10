@@ -252,7 +252,7 @@ def get_user_accounts(user):
 
 
 def get_default_account(user):
-    """Fetch the user's default account (usually their demo account)."""
+    """Fetch the user's default account."""
     try:
         return Account.objects.filter(user=user, is_default=True).first()
     except Account.DoesNotExist:
@@ -260,22 +260,7 @@ def get_default_account(user):
 ```
 
 ### signals.py
-```python
-from django.db.models.signals import post_save
-from django.dispatch import receiver
-from django.conf import settings
-from django.contrib.auth import get_user_model
-from .services import create_demo_account
-
-User = get_user_model()
-
-
-@receiver(post_save, sender=User)
-def create_default_demo_account(sender, instance, created, **kwargs):
-    """Every new user gets a demo account (default behavior)."""
-    if created:
-        create_demo_account(instance)
-```
+No automatic demo-account creation. Accounts are created explicitly via API or Deriv OAuth.
 
 ---
 

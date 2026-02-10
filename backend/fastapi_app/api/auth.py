@@ -166,7 +166,6 @@ async def signup(request: SignupRequest):
     
     Automatically:
     - Creates affiliate code
-    - Creates demo account with $10K
     - Assigns referral if code provided
     """
     try:

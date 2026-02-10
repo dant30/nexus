@@ -86,13 +86,12 @@ python django_core/manage.py createsuperuser
 # Email: admin@example.com
 # Password: (choose one)
 
-# Create required database records (demo accounts, etc)
+# Create required database records (if any)
 python django_core/manage.py shell
 ```
 
 In Django shell:
 ```python
-from django_core.accounts.services import create_demo_account
 from django_core.users.models import User
 
 # Create test user (optional)
@@ -103,20 +102,8 @@ user, created = User.objects.get_or_create(
 if created:
     user.set_password('testpass123')
     user.save()
-    
+
 print(f"User: {user.username}, ID: {user.id}")
-
-# Test demo account creation
-from django_core.accounts.models import Account
-account = Account.objects.create(
-    user=user,
-    account_type='DEMO',
-    currency='USD',
-    balance=10000,
-    is_default=True
-)
-print(f"Demo account created with balance: {account.balance}")
-
 exit()
 ```
 
