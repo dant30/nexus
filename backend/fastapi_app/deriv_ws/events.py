@@ -58,6 +58,7 @@ class WebSocketStatus(str, Enum):
     CONNECTING = "connecting"
     CONNECTED = "connected"
     AUTHORIZED = "authorized"
+    RECONNECTING = "reconnecting"
     DISCONNECTED = "disconnected"
     ERROR = "error"
 
