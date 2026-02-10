@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Bell, ChevronDown, LogOut, Menu, Settings, User } from "lucide-react";
 
@@ -16,6 +16,8 @@ export function Navbar({ onMenuClick }) {
 
   const [openUserMenu, setOpenUserMenu] = useState(false);
   const [openAccountMenu, setOpenAccountMenu] = useState(false);
+  const userMenuRef = useRef(null);
+  const accountMenuRef = useRef(null);
 
   const displayName =
     user?.deriv_full_name?.trim() ||
@@ -30,6 +32,32 @@ export function Navbar({ onMenuClick }) {
       : user?.deriv_is_virtual === false
       ? "Real"
       : "Account");
+
+  useEffect(() => {
+    if (!openUserMenu && !openAccountMenu) return;
+
+    const handleClickOutside = (event) => {
+      const target = event.target;
+      const clickedUserMenu =
+        userMenuRef.current && userMenuRef.current.contains(target);
+      const clickedAccountMenu =
+        accountMenuRef.current && accountMenuRef.current.contains(target);
+
+      if (!clickedUserMenu) {
+        setOpenUserMenu(false);
+      }
+      if (!clickedAccountMenu) {
+        setOpenAccountMenu(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("touchstart", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("touchstart", handleClickOutside);
+    };
+  }, [openUserMenu, openAccountMenu]);
 
   return (
     <header className="sticky top-0 z-40 border-b border-white/10 bg-slate/80 backdrop-blur">
@@ -61,7 +89,7 @@ export function Navbar({ onMenuClick }) {
                 <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-accent" />
               </button>
 
-              <div className="relative">
+              <div className="relative" ref={accountMenuRef}>
                 <button
                   onClick={() => setOpenAccountMenu((v) => !v)}
                   className="flex items-center gap-2 rounded-full border border-white/10 px-4 py-2 text-xs text-white/80 transition hover:border-white/30"
@@ -104,7 +132,7 @@ export function Navbar({ onMenuClick }) {
                 )}
               </div>
 
-              <div className="relative">
+              <div className="relative" ref={userMenuRef}>
                 <button
                   onClick={() => setOpenUserMenu((v) => !v)}
                   className="flex items-center gap-2 rounded-full border border-white/10 px-4 py-2 text-xs text-white/80 transition hover:border-white/30"
