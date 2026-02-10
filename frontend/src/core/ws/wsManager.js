@@ -1,3 +1,4 @@
+// frontend/src/core/ws/wsManager.js
 /**
  * WebSocket Manager
  * Manages real-time connections for trading updates

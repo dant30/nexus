@@ -1,12 +1,13 @@
+// frontend/src/providers/WSProvider.jsx
 /**
  * WebSocket Hook & Provider
  * Manages WebSocket connections for real-time updates
  */
 
 import React, { createContext, useState, useCallback, useEffect } from "react";
-import { wsManager } from "../ws/wsManager.js";
-import { WS_ENDPOINTS } from "../constants/api.js";
-import { useAuth } from "./AuthProvider.jsx";
+import { wsManager } from "../core/ws/wsManager.js";
+import { WS_ENDPOINTS } from "../core/constants/api.js";
+import { useAuth } from "../features/auth/contexts/AuthContext.jsx";
 
 export const WSContext = createContext(null);
 

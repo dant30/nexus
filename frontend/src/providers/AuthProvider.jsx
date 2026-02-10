@@ -6,9 +6,9 @@
 
 import React, { createContext, useState, useCallback, useEffect } from "react";
 import { apiClient } from "../core/api/client.js";
-import { API_ENDPOINTS } from "../constants/api.js";
-import AuthStorage from "../storage/auth.js";
-import { handleAPIError } from "../api/errorHandler.js";
+import { API_ENDPOINTS } from "../core/constants/api.js";
+import AuthStorage from "../core/storage/auth.js";
+import { handleAPIError } from "../core/api/errorHandler.js";
 
 export const AuthContext = createContext(null);
 
