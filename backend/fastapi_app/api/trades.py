@@ -2,10 +2,11 @@
 Trade execution and history routes.
 """
 from typing import Optional, List
+import asyncio
 from decimal import Decimal
 from enum import Enum
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from pydantic import BaseModel, condecimal, Field
 from asgiref.sync import sync_to_async
 
@@ -68,6 +69,8 @@ class CreateTradeRequest(BaseModel):
     stake: condecimal(max_digits=12, decimal_places=6)
     account_id: Optional[int] = None
     duration_seconds: Optional[int] = None
+    duration_unit: Optional[str] = None
+    symbol: Optional[str] = None
 
 class CloseTradeRequest(BaseModel):
     payout: condecimal(max_digits=12, decimal_places=6)
@@ -82,6 +85,7 @@ class CloseTradeRequest(BaseModel):
 async def execute_trade(
     request: CreateTradeRequest,
     current_user: CurrentUser = Depends(get_current_user),
+    http_request: Request = None,
 ):
     """
     Execute a trade.
@@ -140,6 +144,56 @@ async def execute_trade(
             stake=str(stake),
             direction=request.direction.value,
         )
+
+        async def _close_after_duration():
+            try:
+                duration = int(request.duration_seconds or 0)
+                if duration <= 0:
+                    return
+                duration_unit = (request.duration_unit or "seconds").lower()
+
+                # Determine entry price from latest tick
+                symbol = request.symbol
+                entry_price = None
+                if http_request and symbol:
+                    ticks = http_request.app.state.market_ticks.get(symbol, [])
+                    if ticks:
+                        entry_price = Decimal(str(ticks[-1].get("price", 0)))
+
+                if duration_unit == "ticks" and http_request and symbol:
+                    start_len = len(http_request.app.state.market_ticks.get(symbol, []))
+                    target = start_len + duration
+                    timeout = 120
+                    waited = 0
+                    while len(http_request.app.state.market_ticks.get(symbol, [])) < target and waited < timeout:
+                        await asyncio.sleep(0.2)
+                        waited += 0.2
+                else:
+                    if duration_unit == "minutes":
+                        duration *= 60
+                    elif duration_unit == "hours":
+                        duration *= 3600
+                    await asyncio.sleep(duration)
+
+                end_price = entry_price
+                if http_request and symbol:
+                    ticks = http_request.app.state.market_ticks.get(symbol, [])
+                    if ticks:
+                        end_price = Decimal(str(ticks[-1].get("price", 0)))
+
+                payout = stake
+                if entry_price is not None and end_price is not None:
+                    if request.direction.value == "RISE":
+                        payout = stake * Decimal("1.8") if end_price > entry_price else Decimal("0")
+                    else:
+                        payout = stake * Decimal("1.8") if end_price < entry_price else Decimal("0")
+
+                await sync_to_async(close_trade)(trade, payout, None)
+            except Exception as e:
+                log_error("Auto close failed", exception=e, trade_id=trade.id)
+
+        if request.duration_seconds:
+            asyncio.create_task(_close_after_duration())
         
         return TradeResponse(
             id=trade.id,
