@@ -9,10 +9,10 @@ import { useTradingContext } from "../contexts/TradingContext.jsx";
 
 export function SignalsMonitor() {
   const { signals, loading } = useSignals();
-  const { timeframeSeconds, setTimeframeSeconds } = useTradingContext();
-  const timeframeLabel = `${Math.max(1, Math.round(timeframeSeconds / 60))}m`;
+  const { signalsTimeframeSeconds, setSignalsTimeframeSeconds } = useTradingContext();
+  const timeframeLabel = `${Math.max(1, Math.round(signalsTimeframeSeconds / 60))}m`;
   const filteredSignals =
-    timeframeSeconds === 0
+    signalsTimeframeSeconds === 0
       ? signals
       : signals.filter((signal) => signal.timeframe === timeframeLabel);
 
@@ -21,8 +21,8 @@ export function SignalsMonitor() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="text-sm font-semibold text-white/80">Signal Monitor</div>
         <Select
-          value={timeframeSeconds}
-          onChange={(event) => setTimeframeSeconds(Number(event.target.value))}
+          value={signalsTimeframeSeconds}
+          onChange={(event) => setSignalsTimeframeSeconds(Number(event.target.value))}
           className="max-w-[160px]"
         >
           <option value={0}>All</option>

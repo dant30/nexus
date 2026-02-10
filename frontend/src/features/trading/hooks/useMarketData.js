@@ -93,7 +93,7 @@ export const useMarketData = (symbol, timeframeSeconds = 60) => {
 
   useEffect(() => {
     if (!symbol || !connected) return;
-    const interval = timeframeSeconds || 60;
+    const interval = Math.max(60, timeframeSeconds || 60);
     subscribeTick(symbol, { interval });
     sendMessage("market_snapshot", { symbol, interval });
     const offTick = onMessage("tick", handleTick);

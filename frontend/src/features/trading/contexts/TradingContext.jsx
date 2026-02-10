@@ -13,6 +13,10 @@ export function TradingProvider({ children }) {
     const saved = Number(localStorage.getItem("nexus:trading:timeframe"));
     return saved > 0 ? saved : 60;
   });
+  const [signalsTimeframeSeconds, setSignalsTimeframeSeconds] = useState(() => {
+    const saved = Number(localStorage.getItem("nexus:trading:signals_timeframe"));
+    return saved >= 0 ? saved : 0;
+  });
   const { isAuthenticated } = useAuth();
 
   const refresh = useCallback(async () => {
@@ -46,6 +50,13 @@ export function TradingProvider({ children }) {
     localStorage.setItem("nexus:trading:timeframe", String(timeframeSeconds));
   }, [timeframeSeconds]);
 
+  useEffect(() => {
+    localStorage.setItem(
+      "nexus:trading:signals_timeframe",
+      String(signalsTimeframeSeconds)
+    );
+  }, [signalsTimeframeSeconds]);
+
   return (
     <TradingContext.Provider
       value={{
@@ -58,6 +69,8 @@ export function TradingProvider({ children }) {
         refresh,
         timeframeSeconds,
         setTimeframeSeconds,
+        signalsTimeframeSeconds,
+        setSignalsTimeframeSeconds,
       }}
     >
       {children}
