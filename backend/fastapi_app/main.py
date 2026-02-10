@@ -9,6 +9,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.authentication import AuthenticationMiddleware
 from fastapi.responses import JSONResponse
+from asgiref.sync import sync_to_async
 
 from shared.database.django import setup_django
 from shared.utils.logger import log_info, log_error
@@ -22,6 +23,13 @@ from fastapi_app.middleware.logging import LoggingMiddleware
 from fastapi_app.api import routes
 from fastapi_app.oauth import routes as oauth_routes
 from fastapi_app.deriv_ws.client import DerivWebSocketClient
+from fastapi_app.trading_engine.engine import TradingEngine
+from fastapi_app.trading_engine.strategies import (
+    MomentumStrategy,
+    BreakoutStrategy,
+    ScalpingStrategy,
+)
+from django_core.accounts.models import Account
 
 
 DERIV_SYMBOLS = set(settings.DERIV_SYMBOLS)
@@ -266,22 +274,36 @@ def _build_candles(ticks, interval: int, count: int = 60):
     return list(sorted(buckets.values(), key=lambda c: c["time"]))[-count:]
 
 
-def _signal_from_ticks(symbol: str, ticks: list, interval: int):
-    if len(ticks) < 5:
+async def _signal_from_engine(symbol: str, ticks: list, candles: list, interval: int, account: Account):
+    if not ticks and not candles:
         return None
-    first = float(ticks[0]["price"])
-    last = float(ticks[-1]["price"])
-    direction = "RISE" if last >= first else "FALL"
-    move = abs(last - first)
-    confidence = min(0.95, max(0.55, move * 800))
+    strategies = [
+        MomentumStrategy(symbol=symbol, period=interval),
+        BreakoutStrategy(symbol=symbol, period=interval),
+        ScalpingStrategy(symbol=symbol, period=interval),
+    ]
+    engine = TradingEngine(strategies=strategies, account=account)
+    result = await engine.analyze(candles=candles, ticks=ticks)
+    if not result.get("success"):
+        return None
+    consensus = result.get("consensus", {})
+    decision = consensus.get("decision", "NEUTRAL")
+    if "RISE" in decision:
+        direction = "RISE"
+    elif "FALL" in decision:
+        direction = "FALL"
+    else:
+        direction = "NEUTRAL"
     minutes = max(1, int(interval / 60))
     return {
-        "id": f"sig-{symbol}-{ticks[-1]['time']}",
+        "id": f"sig-{symbol}-{int(time.time())}",
         "symbol": symbol,
         "direction": direction,
-        "confidence": round(confidence, 2),
+        "confidence": float(consensus.get("confidence", 0)),
         "timeframe": f"{minutes}m",
-        "source": "WS Engine",
+        "source": "Trading Engine",
+        "consensus": consensus,
+        "strategies": result.get("strategies", []),
     }
 
 
@@ -393,8 +415,18 @@ async def handle_ws_message(websocket: WebSocket, user_id: int, account_id: int,
         connection_id = f"{user_id}_{account_id}"
         subscriptions = app.state.ws_subscriptions.get(connection_id, {})
         signals = []
+        try:
+            account = await sync_to_async(Account.objects.get)(id=account_id, user_id=user_id)
+        except Exception as e:
+            log_error("Failed to resolve account for signals", exception=e)
+            account = None
         for symbol, sub in subscriptions.items():
-            signal = _signal_from_ticks(symbol, sub.get("ticks", []), sub.get("interval", 60))
+            if not account:
+                break
+            interval = sub.get("interval", 60)
+            ticks = sub.get("ticks", [])
+            candles = app.state.market_candles.get(sub.get("symbol"), [])
+            signal = await _signal_from_engine(symbol, ticks, candles, interval, account)
             if signal:
                 signals.append(signal)
         await _send_event(websocket, "signals", signals)

@@ -4,36 +4,6 @@ import { useWebSocket } from "../../../providers/WSProvider.jsx";
 const MAX_TICKS = 360;
 const MAX_CANDLES = 120;
 
-const buildCandles = (ticks, interval) => {
-  if (!ticks?.length) return [];
-  const buckets = new Map();
-
-  ticks.forEach((tick) => {
-    const time = Number(tick.time);
-    if (!time) return;
-    const bucketKey = Math.floor(time / interval) * interval;
-    const price = Number(tick.price);
-    if (!buckets.has(bucketKey)) {
-      buckets.set(bucketKey, {
-        time: bucketKey,
-        open: price,
-        high: price,
-        low: price,
-        close: price,
-      });
-    } else {
-      const candle = buckets.get(bucketKey);
-      candle.high = Math.max(candle.high, price);
-      candle.low = Math.min(candle.low, price);
-      candle.close = price;
-    }
-  });
-
-  return Array.from(buckets.values())
-    .sort((a, b) => a.time - b.time)
-    .slice(-MAX_CANDLES);
-};
-
 export const useMarketData = (symbol, timeframeSeconds = 60) => {
   const { subscribeTick, unsubscribeTick, onMessage, connected, sendMessage } = useWebSocket();
   const [ticks, setTicks] = useState([]);
@@ -123,14 +93,7 @@ export const useMarketData = (symbol, timeframeSeconds = 60) => {
     setCandles([]);
   }, [symbol, timeframeSeconds]);
 
-  const fallbackCandles = useMemo(
-    () => buildCandles(ticks, timeframeSeconds || 60),
-    [ticks, timeframeSeconds]
-  );
-  const data = useMemo(
-    () => ({ symbol, ticks, candles: candles.length ? candles : fallbackCandles }),
-    [symbol, ticks, candles, fallbackCandles]
-  );
+  const data = useMemo(() => ({ symbol, ticks, candles }), [symbol, ticks, candles]);
 
   return { data, loading: !connected, error };
 };
