@@ -19,7 +19,7 @@ import { Select } from "../../../shared/components/ui/inputs/Select.jsx";
 import { useTradingContext } from "../contexts/TradingContext.jsx";
 
 export function ManualTrading() {
-  const [market, setMarket] = useState("EURUSD");
+  const [market, setMarket] = useState("R_50");
   const [contractType, setContractType] = useState(TRADING.CONTRACT_TYPES[0].value);
   const [direction, setDirection] = useState(TRADING.DIRECTIONS[0].value);
   const [stake, setStake] = useState(TRADING.DEFAULT_STAKE);

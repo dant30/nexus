@@ -96,6 +96,12 @@ async def execute_trade(
     try:
         user = await sync_to_async(User.objects.get)(id=current_user.user_id)
         
+        # Enforce Rise/Fall (Call/Put) only
+        if request.contract_type not in {ContractType.CALL, ContractType.PUT}:
+            raise HTTPException(status_code=400, detail="Only Call/Put contract types are supported")
+        if request.direction not in {Direction.RISE, Direction.FALL}:
+            raise HTTPException(status_code=400, detail="Only Rise/Fall directions are supported")
+
         # Get account
         if request.account_id:
             account = await sync_to_async(user.accounts.get)(id=request.account_id)

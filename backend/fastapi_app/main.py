@@ -28,11 +28,12 @@ from fastapi_app.deriv_ws.client import DerivWebSocketClient
 
 logger = get_logger("fastapi")
 
-DERIV_SYMBOL_MAP = {
-    "EURUSD": "frxEURUSD",
-    "GBPUSD": "frxGBPUSD",
-    "USDJPY": "frxUSDJPY",
-    "AUDUSD": "frxAUDUSD",
+DERIV_SYMBOLS = {
+    "R_10",
+    "R_25",
+    "R_50",
+    "R_75",
+    "R_100",
 }
 
 # Global state for WebSocket & trading engine
@@ -84,21 +85,18 @@ async def lifespan(app: FastAPI):
 
             for connection_id, subscriptions in app.state.ws_subscriptions.items():
                 for subscription in subscriptions.values():
-                    if subscription.get("deriv_symbol") != deriv_symbol:
+                    if subscription.get("symbol") != deriv_symbol:
                         continue
                     websocket = app.state.ws_connections.get(connection_id)
                     if not websocket:
                         continue
 
-                    ui_symbol = subscription.get("ui_symbol", deriv_symbol)
-                    outgoing = {**payload, "symbol": ui_symbol}
-
                     if event == "ohlc":
-                        await _send_event(websocket, "candle", outgoing)
+                        await _send_event(websocket, "candle", payload)
                     else:
-                        subscription["ticks"].append(outgoing)
+                        subscription["ticks"].append(payload)
                         subscription["ticks"] = subscription["ticks"][-600:]
-                        await _send_event(websocket, "tick", outgoing)
+                        await _send_event(websocket, "tick", payload)
 
         app.state.deriv_client.on_message(_deriv_callback)
         await app.state.deriv_client.connect()
@@ -364,14 +362,16 @@ async def handle_ws_message(websocket: WebSocket, user_id: int, account_id: int,
         log_info(f"Subscribe to {symbol}", user_id=user_id)
         if not symbol:
             return
-        deriv_symbol = DERIV_SYMBOL_MAP.get(symbol, symbol)
+        if symbol not in DERIV_SYMBOLS:
+            log_error("Unsupported symbol", symbol=symbol)
+            return
+        deriv_symbol = symbol
         connection_id = f"{user_id}_{account_id}"
         app.state.ws_subscriptions.setdefault(connection_id, {})[symbol] = {
             "interval": interval,
             "ticks": app.state.market_ticks.get(deriv_symbol, [])[-600:],
             "last_candle": 0,
-            "ui_symbol": symbol,
-            "deriv_symbol": deriv_symbol,
+            "symbol": deriv_symbol,
         }
         if app.state.deriv_client:
             if deriv_symbol not in app.state.deriv_subscriptions:
@@ -397,10 +397,7 @@ async def handle_ws_message(websocket: WebSocket, user_id: int, account_id: int,
         if not candles:
             ticks = subscription["ticks"] if subscription else app.state.market_ticks.get(symbol, [])
             candles = _build_candles(ticks, interval, count=60)
-        normalized = []
-        for candle in candles:
-            normalized.append({**candle, "symbol": symbol})
-        await _send_event(websocket, "candles", normalized)
+        await _send_event(websocket, "candles", candles)
 
     elif event_type == "signals_snapshot":
         connection_id = f"{user_id}_{account_id}"
