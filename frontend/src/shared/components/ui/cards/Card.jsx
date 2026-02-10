@@ -1,5 +1,5 @@
 import React from "react";
 
-export function Card({ children }) {
-  return <div className="bg-slate-800 rounded p-4">{children}</div>;
+export function Card({ children, className = "" }) {
+  return <div className={`bg-slate-800 rounded-lg p-4 shadow-card ${className}`}>{children}</div>;
 }

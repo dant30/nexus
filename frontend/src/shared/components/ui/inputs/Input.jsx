@@ -1,5 +1,10 @@
 import React from "react";
 
-export function Input(props) {
-  return <input className="px-3 py-2 bg-slate-700 rounded" {...props} />;
+export function Input({ className = "", ...props }) {
+  return (
+    <input
+      className={`w-full rounded-md bg-slate-700 px-3 py-2 text-sm text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-accent/20 ${className}`}
+      {...props}
+    />
+  );
 }

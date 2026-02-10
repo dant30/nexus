@@ -1,5 +1,12 @@
 import React from "react";
 
-export function Select(props) {
-  return <select className="px-3 py-2 bg-slate-700 rounded" {...props} />;
+export function Select({ className = "", children, ...props }) {
+  return (
+    <select
+      className={`w-full rounded-md bg-slate-700 px-3 py-2 text-sm text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-accent/20 ${className}`}
+      {...props}
+    >
+      {children}
+    </select>
+  );
 }
