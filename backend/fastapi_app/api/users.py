@@ -6,6 +6,8 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr
+from asgiref.sync import sync_to_async
+from django.db import models
 
 import django
 django.setup()
@@ -55,7 +57,7 @@ class AffiliateCodeResponse(BaseModel):
 async def get_user_profile(current_user: CurrentUser = Depends(get_current_user)):
     """Get current user's profile."""
     try:
-        user = User.objects.get(id=current_user.user_id)
+        user = await sync_to_async(User.objects.get)(id=current_user.user_id)
         
         return UserProfileResponse(
             id=user.id,
@@ -81,7 +83,7 @@ async def update_user_profile(
 ):
     """Update user profile."""
     try:
-        user = User.objects.get(id=current_user.user_id)
+        user = await sync_to_async(User.objects.get)(id=current_user.user_id)
         
         # Update allowed fields
         if request.email:
@@ -91,7 +93,7 @@ async def update_user_profile(
         if request.last_name:
             user.last_name = request.last_name
         
-        user.save()
+        await sync_to_async(user.save)()
         
         log_info(f"User profile updated", user_id=user.id)
         
@@ -120,7 +122,7 @@ async def update_user_profile(
 async def get_affiliate_code(current_user: CurrentUser = Depends(get_current_user)):
     """Get user's affiliate code."""
     try:
-        user = User.objects.get(id=current_user.user_id)
+        user = await sync_to_async(User.objects.get)(id=current_user.user_id)
         affiliate_code = getattr(user, "affiliate_code", None)
         
         if not affiliate_code:
@@ -147,25 +149,26 @@ async def get_affiliate_stats(current_user: CurrentUser = Depends(get_current_us
     try:
         from django_core.referrals.models import Referral, ReferralCode
         
-        user = User.objects.get(id=current_user.user_id)
+        user = await sync_to_async(User.objects.get)(id=current_user.user_id)
         
         # Get referral codes owned by this user
-        codes = ReferralCode.objects.filter(owner=user)
+        codes = await sync_to_async(list)(ReferralCode.objects.filter(owner=user))
         total_uses = sum(code.uses for code in codes)
         
         # Get referrals
-        referrals = Referral.objects.filter(code__owner=user)
-        total_referrals = referrals.count()
+        total_referrals = await sync_to_async(
+            Referral.objects.filter(code__owner=user).count
+        )()
         
         # Get commission earned
         from django_core.commission.models import CommissionTransaction
-        commission_total = CommissionTransaction.objects.filter(
-            owner=user
-        ).aggregate(total=models.Sum("amount"))
+        commission_total = await sync_to_async(
+            CommissionTransaction.objects.filter(owner=user).aggregate
+        )(total=models.Sum("amount"))
         
         return {
             "affiliate_code": getattr(user, "affiliate_code", None),
-            "referral_codes": codes.count(),
+            "referral_codes": len(codes),
             "total_uses": total_uses,
             "total_referrals": total_referrals,
             "commission_earned": float(commission_total.get("total") or 0),

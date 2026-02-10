@@ -3,6 +3,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from asgiref.sync import sync_to_async
 
 import django
 django.setup()
@@ -37,12 +38,17 @@ async def list_notifications(
 ):
     """Get notifications."""
     try:
-        user = User.objects.get(id=current_user.user_id)
+        user = await sync_to_async(User.objects.get)(id=current_user.user_id)
         
         if unread_only:
-            notifications = get_unread_notifications(user, limit=limit)
+            notifications = await sync_to_async(list)(
+                get_unread_notifications(user, limit=limit)
+            )
         else:
-            notifications = Notification.objects.filter(user=user).order_by("-created_at")[:limit]
+            notifications = await sync_to_async(list)(
+                Notification.objects.filter(user=user)
+                .order_by("-created_at")[:limit]
+            )
         
         return [
             NotificationResponse(
@@ -69,9 +75,11 @@ async def mark_as_read(
 ):
     """Mark notification as read."""
     try:
-        notification = Notification.objects.get(id=notification_id, user_id=current_user.user_id)
+        notification = await sync_to_async(Notification.objects.get)(
+            id=notification_id, user_id=current_user.user_id
+        )
         notification.is_read = True
-        notification.save()
+        await sync_to_async(notification.save)()
         
         return {"success": True}
     except Notification.DoesNotExist:

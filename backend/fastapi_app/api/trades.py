@@ -7,6 +7,7 @@ from enum import Enum
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, condecimal, Field
+from asgiref.sync import sync_to_async
 
 import django
 django.setup()
@@ -93,13 +94,13 @@ async def execute_trade(
     5. Send WebSocket update
     """
     try:
-        user = User.objects.get(id=current_user.user_id)
+        user = await sync_to_async(User.objects.get)(id=current_user.user_id)
         
         # Get account
         if request.account_id:
-            account = user.accounts.get(id=request.account_id)
+            account = await sync_to_async(user.accounts.get)(id=request.account_id)
         else:
-            account = get_default_account(user)
+            account = await sync_to_async(get_default_account)(user)
         
         if not account:
             raise HTTPException(status_code=404, detail="No account found")
@@ -116,7 +117,7 @@ async def execute_trade(
         proposal_id = generate_proposal_id()
         
         # Create trade record
-        trade = create_trade(
+        trade = await sync_to_async(create_trade)(
             user=user,
             contract_type=request.contract_type.value,
             direction=request.direction.value,
@@ -169,8 +170,8 @@ async def list_trades(
 ):
     """Get user's trade history."""
     try:
-        user = User.objects.get(id=current_user.user_id)
-        trades = get_user_trades(user, limit=limit + offset)
+        user = await sync_to_async(User.objects.get)(id=current_user.user_id)
+        trades = await sync_to_async(list)(get_user_trades(user, limit=limit + offset))
         
         return [
             TradeResponse(
@@ -204,8 +205,8 @@ async def list_trades(
 async def list_open_trades(current_user: CurrentUser = Depends(get_current_user)):
     """Get user's open trades."""
     try:
-        user = User.objects.get(id=current_user.user_id)
-        trades = get_open_trades(user)
+        user = await sync_to_async(User.objects.get)(id=current_user.user_id)
+        trades = await sync_to_async(list)(get_open_trades(user))
         
         return [
             TradeResponse(
@@ -242,7 +243,9 @@ async def get_trade(
 ):
     """Get specific trade details."""
     try:
-        trade = Trade.objects.get(id=trade_id, user_id=current_user.user_id)
+        trade = await sync_to_async(Trade.objects.get)(
+            id=trade_id, user_id=current_user.user_id
+        )
         
         return TradeResponse(
             id=trade.id,
@@ -277,7 +280,9 @@ async def close_trade_endpoint(
 ):
     """Close an open trade."""
     try:
-        trade = Trade.objects.get(id=trade_id, user_id=current_user.user_id)
+        trade = await sync_to_async(Trade.objects.get)(
+            id=trade_id, user_id=current_user.user_id
+        )
         
         if trade.status != Trade.STATUS_OPEN:
             raise HTTPException(status_code=400, detail="Trade is not open")
@@ -285,8 +290,8 @@ async def close_trade_endpoint(
         payout = Decimal(request.payout)
         
         # Close trade
-        close_trade(trade, payout, request.transaction_id)
-        trade.refresh_from_db()
+        await sync_to_async(close_trade)(trade, payout, request.transaction_id)
+        await sync_to_async(trade.refresh_from_db)()
         
         log_info(
             "Trade closed",
@@ -330,7 +335,9 @@ async def get_trade_profit(
 ):
     """Calculate trade profit/loss."""
     try:
-        trade = Trade.objects.get(id=trade_id, user_id=current_user.user_id)
+        trade = await sync_to_async(Trade.objects.get)(
+            id=trade_id, user_id=current_user.user_id
+        )
         
         profit = trade.profit or Decimal("0")
         loss = -profit if profit < 0 else Decimal("0")

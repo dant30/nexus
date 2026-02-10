@@ -4,6 +4,7 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from asgiref.sync import sync_to_async
 
 import django
 django.setup()
@@ -37,8 +38,8 @@ async def list_transactions(
 ):
     """Get transaction history."""
     try:
-        user = User.objects.get(id=current_user.user_id)
-        transactions = get_user_transactions(user, limit=limit)
+        user = await sync_to_async(User.objects.get)(id=current_user.user_id)
+        transactions = await sync_to_async(list)(get_user_transactions(user, limit=limit))
         
         return [
             TransactionResponse(
@@ -62,8 +63,8 @@ async def list_transactions(
 async def get_total_balance(current_user: CurrentUser = Depends(get_current_user)):
     """Get total balance across all accounts."""
     try:
-        user = User.objects.get(id=current_user.user_id)
-        accounts = user.accounts.all()
+        user = await sync_to_async(User.objects.get)(id=current_user.user_id)
+        accounts = await sync_to_async(list)(user.accounts.all())
         total = sum(Decimal(acc.balance) for acc in accounts)
         
         return {"total_balance": str(total)}

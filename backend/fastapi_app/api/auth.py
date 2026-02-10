@@ -7,6 +7,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from pydantic import BaseModel, EmailStr, Field
+from asgiref.sync import sync_to_async
 
 import django
 django.setup()
@@ -75,7 +76,9 @@ async def login(request: LoginRequest):
     """
     try:
         # Django authentication
-        user = authenticate(username=request.username, password=request.password)
+        user = await sync_to_async(authenticate)(
+            username=request.username, password=request.password
+        )
         
         if not user:
             log_error(f"Login failed: invalid credentials for {request.username}")
@@ -168,33 +171,33 @@ async def signup(request: SignupRequest):
     """
     try:
         # Check if user exists
-        if User.objects.filter(username=request.username).exists():
+        if await sync_to_async(User.objects.filter(username=request.username).exists)():
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Username already taken",
             )
         
-        if User.objects.filter(email=request.email).exists():
+        if await sync_to_async(User.objects.filter(email=request.email).exists)():
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Email already registered",
             )
         
         # Create user
-        user = User.objects.create_user(
+        user = await sync_to_async(User.objects.create_user)(
             username=request.username,
             email=request.email,
             password=request.password,
         )
         
         # Generate affiliate code (via signal)
-        user.refresh_from_db()
+        await sync_to_async(user.refresh_from_db)()
         
         # Handle referral
         if request.referred_by:
             from django_core.referrals.services import register_referral
             try:
-                register_referral(request.referred_by, user)
+                await sync_to_async(register_referral)(request.referred_by, user)
                 log_info(f"Referral registered", user_id=user.id, code=request.referred_by)
             except Exception as e:
                 log_error(f"Referral registration failed", exception=e)
@@ -253,7 +256,7 @@ async def change_password(
 ):
     """Change user password."""
     try:
-        user = User.objects.get(id=current_user.user_id)
+        user = await sync_to_async(User.objects.get)(id=current_user.user_id)
         
         # Verify old password
         if not user.check_password(request.old_password):
@@ -264,7 +267,7 @@ async def change_password(
         
         # Set new password
         user.set_password(request.new_password)
-        user.save()
+        await sync_to_async(user.save)()
         
         log_info(f"Password changed", user_id=user.id)
         
@@ -289,7 +292,7 @@ async def change_password(
 async def get_current_user_profile(current_user: CurrentUser = Depends(get_current_user)):
     """Get current user's profile."""
     try:
-        user = User.objects.get(id=current_user.user_id)
+        user = await sync_to_async(User.objects.get)(id=current_user.user_id)
         
         return {
             "id": user.id,
