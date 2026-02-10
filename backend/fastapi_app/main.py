@@ -24,13 +24,7 @@ from fastapi_app.oauth import routes as oauth_routes
 from fastapi_app.deriv_ws.client import DerivWebSocketClient
 
 
-DERIV_SYMBOLS = {
-    "R_10",
-    "R_25",
-    "R_50",
-    "R_75",
-    "R_100",
-}
+DERIV_SYMBOLS = set(settings.DERIV_SYMBOLS)
 
 # Global state for WebSocket & trading engine
 class AppState:

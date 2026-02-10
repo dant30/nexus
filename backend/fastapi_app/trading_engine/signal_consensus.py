@@ -30,8 +30,8 @@ class ConsensusSignal:
     """Final consensus signal from multiple strategies."""
     decision: ConsensusDecision
     confidence: float  # 0.0 to 1.0
-    buy_votes: int
-    sell_votes: int
+    rise_votes: int
+    fall_votes: int
     hold_votes: int
     reason: str
     timestamp: str
@@ -79,8 +79,8 @@ class SignalConsensus:
             return ConsensusSignal(
                 decision=ConsensusDecision.NEUTRAL,
                 confidence=0.0,
-                buy_votes=0,
-                sell_votes=0,
+                rise_votes=0,
+                fall_votes=0,
                 hold_votes=0,
                 reason="No signals provided",
                 timestamp=datetime.utcnow().isoformat(),
@@ -88,8 +88,8 @@ class SignalConsensus:
             )
         
         # Count votes
-        buy_votes = 0.0
-        sell_votes = 0.0
+        rise_votes = 0.0
+        fall_votes = 0.0
         hold_votes = 0.0
         strong_buy_count = 0
         strong_sell_count = 0
@@ -105,19 +105,19 @@ class SignalConsensus:
             })
             
             if signal.signal == Signal.RISE:
-                buy_votes += signal.confidence
+                rise_votes += signal.confidence
                 if signal.confidence > 0.7:
                     strong_buy_count += 1
             elif signal.signal == Signal.FALL:
-                sell_votes += signal.confidence
+                fall_votes += signal.confidence
                 if signal.confidence > 0.7:
                     strong_sell_count += 1
             elif signal.signal == Signal.HOLD:
                 hold_votes += 1
         
         # Calculate net vote
-        net_vote = buy_votes - sell_votes
-        total_votes = buy_votes + sell_votes
+        net_vote = rise_votes - fall_votes
+        total_votes = rise_votes + fall_votes
         
         # Determine consensus decision
         if total_votes == 0:
@@ -163,16 +163,16 @@ class SignalConsensus:
         log_info(
             f"Consensus signal: {decision.value}",
             confidence=confidence,
-            buy_votes=buy_votes,
-            sell_votes=sell_votes,
+            rise_votes=rise_votes,
+            fall_votes=fall_votes,
             total_strategies=len(signals),
         )
         
         return ConsensusSignal(
             decision=decision,
             confidence=confidence,
-            buy_votes=int(buy_votes),
-            sell_votes=int(sell_votes),
+            rise_votes=int(rise_votes),
+            fall_votes=int(fall_votes),
             hold_votes=int(hold_votes),
             reason=reason,
             timestamp=datetime.utcnow().isoformat(),

@@ -64,6 +64,16 @@ class Settings:
         "DERIV_OAUTH_CALLBACK_URL",
         "http://localhost:3000/oauth/callback"
     )
+    DERIV_SYMBOLS: List[str] = env.get_list(
+        "DERIV_SYMBOLS",
+        [
+            "R_10",
+            "R_25",
+            "R_50",
+            "R_75",
+            "R_100",
+        ],
+    )
     
     # Trading Configuration
     MIN_STAKE: float = env.get_float("MIN_STAKE", 0.35)
