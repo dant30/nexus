@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 
 from django_core.accounts.models import Account
 from django_core.trades.models import Trade
+from asgiref.sync import sync_to_async
 from shared.utils.logger import log_error, log_info, get_logger
 
 logger = get_logger("risk")
@@ -60,7 +61,7 @@ class RiskManager:
         self.max_stake = max_stake or self.MAX_STAKE
         self.max_daily_loss_percent = max_daily_loss_percent or self.MAX_DAILY_LOSS_PERCENT
     
-    def assess_trade(
+    async def assess_trade(
         self,
         account: Account,
         stake: Decimal,
@@ -97,7 +98,7 @@ class RiskManager:
             risk_level = "CRITICAL"
         
         # Check daily loss limit
-        daily_loss = self._calculate_daily_loss(account)
+        daily_loss = await self._calculate_daily_loss(account)
         max_allowed_loss = account.balance * (self.max_daily_loss_percent / Decimal("100"))
         
         if daily_loss >= max_allowed_loss:
@@ -107,13 +108,13 @@ class RiskManager:
             risk_level = "CRITICAL"
         
         # Check consecutive losses
-        consecutive_losses = self._count_consecutive_losses(account)
+        consecutive_losses = await self._count_consecutive_losses(account)
         if consecutive_losses >= self.MAX_CONSECUTIVE_LOSSES:
             issues.append(f"Max consecutive losses reached ({consecutive_losses})")
             risk_level = "HIGH"
         
         # Check hourly trade limit
-        trades_this_hour = self._count_trades_this_hour(account)
+        trades_this_hour = await self._count_trades_this_hour(account)
         if trades_this_hour >= self.MAX_TRADES_PER_HOUR:
             issues.append(f"Hourly trade limit reached ({trades_this_hour})")
             risk_level = "MEDIUM"
@@ -138,12 +139,14 @@ class RiskManager:
             issues=issues,
         )
     
-    def _calculate_daily_loss(self, account: Account) -> Decimal:
+    async def _calculate_daily_loss(self, account: Account) -> Decimal:
         """Calculate total loss for today."""
         today = datetime.utcnow().date()
-        today_trades = Trade.objects.filter(
-            account=account,
-            created_at__date=today,
+        today_trades = await sync_to_async(list)(
+            Trade.objects.filter(
+                account=account,
+                created_at__date=today,
+            )
         )
         
         total_loss = Decimal("0")
@@ -154,12 +157,14 @@ class RiskManager:
         
         return total_loss
     
-    def _count_consecutive_losses(self, account: Account) -> int:
+    async def _count_consecutive_losses(self, account: Account) -> int:
         """Count consecutive losing trades."""
-        recent_trades = Trade.objects.filter(
-            account=account,
-            status=Trade.STATUS_CLOSED,
-        ).order_by("-created_at")[:10]
+        recent_trades = await sync_to_async(list)(
+            Trade.objects.filter(
+                account=account,
+                status=Trade.STATUS_CLOSED,
+            ).order_by("-created_at")[:10]
+        )
         
         consecutive = 0
         for trade in recent_trades:
@@ -170,10 +175,12 @@ class RiskManager:
         
         return consecutive
     
-    def _count_trades_this_hour(self, account: Account) -> int:
+    async def _count_trades_this_hour(self, account: Account) -> int:
         """Count trades in the past hour."""
         one_hour_ago = datetime.utcnow() - timedelta(hours=1)
-        return Trade.objects.filter(
-            account=account,
-            created_at__gte=one_hour_ago,
-        ).count()
+        return await sync_to_async(
+            Trade.objects.filter(
+                account=account,
+                created_at__gte=one_hour_ago,
+            ).count
+        )()

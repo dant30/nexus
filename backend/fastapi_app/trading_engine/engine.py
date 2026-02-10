@@ -156,7 +156,7 @@ class TradingEngine:
                 }
             
             # Assess risk
-            risk_assessment = self.risk_manager.assess_trade(self.account, stake)
+            risk_assessment = await self.risk_manager.assess_trade(self.account, stake)
             
             if not risk_assessment.is_approved:
                 return {
