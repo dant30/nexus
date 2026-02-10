@@ -6,13 +6,13 @@ Handles connection, authentication, and message exchange.
 import asyncio
 import json
 from typing import Optional, Callable, Dict, Any
-from datetime import datetime
 
 import websockets
 from websockets.exceptions import ConnectionClosed
 
 from .events import WebSocketStatus, DerivEventType
 from .handlers import DerivEventHandler
+from .serializers import DerivSerializer
 from shared.utils.logger import log_info, log_error, get_logger
 
 logger = get_logger("deriv_client")
@@ -49,6 +49,7 @@ class DerivWebSocketClient:
         self.reconnect_delay = self.RECONNECT_DELAY
         self.message_queue: list = []
         self.callback: Optional[Callable] = None
+        self.event_queue: asyncio.Queue = asyncio.Queue()
     
     async def connect(self) -> bool:
         """
@@ -204,6 +205,9 @@ class DerivWebSocketClient:
                             await self.callback(result)
                         except Exception as e:
                             log_error("Callback error", exception=e)
+                    
+                    if result:
+                        await self.event_queue.put(result)
                 
                 except json.JSONDecodeError as e:
                     log_error("Invalid JSON received", exception=e)
@@ -256,3 +260,64 @@ class DerivWebSocketClient:
         - callback: Async callable to handle messages
         """
         self.callback = callback
+
+    async def request_proposal(
+        self,
+        symbol: str,
+        contract_type: str,
+        amount,
+        duration: int,
+        duration_unit: str,
+        currency: str,
+        req_id: Optional[str] = None,
+    ) -> bool:
+        """Request a contract proposal."""
+        payload = DerivSerializer.serialize_proposal(
+            symbol=symbol,
+            contract_type=contract_type,
+            amount=amount,
+            duration=duration,
+            duration_unit=duration_unit,
+            currency=currency,
+            req_id=req_id,
+        )
+        return await self.send(payload)
+
+    async def buy_contract(self, proposal_id: str, price, req_id: Optional[str] = None) -> bool:
+        """Buy a contract from a proposal."""
+        payload = DerivSerializer.serialize_buy_contract(proposal_id, price)
+        if req_id is not None:
+            payload["req_id"] = req_id
+        return await self.send(payload)
+
+    async def subscribe_open_contract(self, contract_id: int, req_id: Optional[str] = None) -> bool:
+        """Subscribe to open contract updates."""
+        payload = DerivSerializer.serialize_subscribe_open_contract(
+            contract_id=contract_id,
+            req_id=req_id,
+        )
+        return await self.send(payload)
+
+    async def wait_for_event(
+        self,
+        event_type: str,
+        predicate: Optional[Callable[[Dict[str, Any]], bool]] = None,
+        timeout: int = 15,
+    ) -> Optional[Dict[str, Any]]:
+        """Wait for a specific event type from the queue."""
+        end_time = asyncio.get_event_loop().time() + timeout
+        while True:
+            remaining = end_time - asyncio.get_event_loop().time()
+            if remaining <= 0:
+                return None
+            try:
+                event = await asyncio.wait_for(self.event_queue.get(), timeout=remaining)
+            except asyncio.TimeoutError:
+                return None
+            if event.get("event") == "error":
+                return event
+            if event.get("event") != event_type:
+                continue
+            if predicate and not predicate(event):
+                continue
+            return event

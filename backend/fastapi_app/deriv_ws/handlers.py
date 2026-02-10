@@ -2,8 +2,6 @@
 Event handlers for Deriv WebSocket messages.
 """
 from typing import Dict, Any, Callable, Optional
-from decimal import Decimal
-import json
 
 from .events import DerivEventType
 from .serializers import DerivSerializer
@@ -24,6 +22,8 @@ class DerivEventHandler:
             DerivEventType.BALANCE: self._handle_balance,
             DerivEventType.PROPOSAL: self._handle_proposal,
             DerivEventType.CANDLE: self._handle_ohlc,
+            DerivEventType.BUY: self._handle_buy,
+            DerivEventType.PROPOSAL_OPEN_CONTRACT: self._handle_open_contract,
         }
     
     async def handle_message(self, message: Dict[str, Any]) -> Optional[Dict]:
@@ -46,6 +46,10 @@ class DerivEventHandler:
                 return await self._handle_balance(message)
             elif "proposal"in message:
                 return await self._handle_proposal(message)
+            elif "buy" in message:
+                return await self._handle_buy(message)
+            elif "proposal_open_contract" in message:
+                return await self._handle_open_contract(message)
             elif "error" in message:
                 return await self._handle_error(message)
             else:
@@ -86,6 +90,29 @@ class DerivEventHandler:
         if proposal:
             log_info(f"Proposal received: {proposal['id']} @ {proposal['ask_price']}")
         return proposal
+
+    async def _handle_buy(self, data: Dict[str, Any]) -> Optional[Dict]:
+        """Handle buy response."""
+        buy = DerivSerializer.deserialize_buy(data)
+        if buy:
+            log_info(
+                "Buy confirmed",
+                contract_id=buy.get("contract_id"),
+                transaction_id=buy.get("transaction_id"),
+            )
+        return buy
+
+    async def _handle_open_contract(self, data: Dict[str, Any]) -> Optional[Dict]:
+        """Handle proposal_open_contract updates."""
+        update = DerivSerializer.deserialize_open_contract(data)
+        if update:
+            log_info(
+                "Contract update",
+                contract_id=update.get("contract_id"),
+                status=update.get("status"),
+                is_sold=update.get("is_sold"),
+            )
+        return update
     
     async def _handle_error(self, data: Dict[str, Any]) -> Dict:
         """Handle error message."""
@@ -96,7 +123,7 @@ class DerivEventHandler:
         log_error(f"Deriv error: {message}", code=code)
         
         return {
-            "type": "error",
+            "event": "error",
             "code": code,
             "message": message,
         }

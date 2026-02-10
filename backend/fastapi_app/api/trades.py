@@ -2,12 +2,11 @@
 Trade execution and history routes.
 """
 from typing import Optional, List
-import asyncio
 from decimal import Decimal
 from enum import Enum
 
-from fastapi import APIRouter, Depends, HTTPException, status, Request
-from pydantic import BaseModel, condecimal, Field
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, condecimal
 from asgiref.sync import sync_to_async
 
 import django
@@ -19,6 +18,7 @@ from django_core.trades.services import create_trade, close_trade
 from django_core.trades.selectors import get_user_trades, get_open_trades
 from django_core.accounts.selectors import get_default_account
 from fastapi_app.deps import get_current_user, CurrentUser
+from fastapi_app.deriv_ws.connection_pool import pool
 from shared.utils.logger import log_info, log_error, get_logger
 from shared.utils.ids import generate_proposal_id
 
@@ -85,17 +85,16 @@ class CloseTradeRequest(BaseModel):
 async def execute_trade(
     request: CreateTradeRequest,
     current_user: CurrentUser = Depends(get_current_user),
-    http_request: Request = None,
 ):
     """
     Execute a trade.
     
     Steps:
     1. Validate account & balance
-    2. Apply commission & markup
-    3. Create Trade record
-    4. Emit to Deriv API
-    5. Send WebSocket update
+    2. Request Deriv proposal
+    3. Buy contract
+    4. Create Trade record
+    5. Monitor contract close
     """
     try:
         user = await sync_to_async(User.objects.get)(id=current_user.user_id)
@@ -122,78 +121,140 @@ async def execute_trade(
             raise HTTPException(status_code=400, detail="Minimum stake is $0.35")
         if stake > account.balance:
             raise HTTPException(status_code=400, detail="Insufficient balance")
+
+        if not request.symbol:
+            raise HTTPException(status_code=400, detail="Symbol is required")
+        if not request.duration_seconds or not request.duration_unit:
+            raise HTTPException(status_code=400, detail="Duration is required")
+        if int(request.duration_seconds or 0) <= 0:
+            raise HTTPException(status_code=400, detail="Duration must be greater than zero")
         
-        # Generate proposal ID
-        proposal_id = generate_proposal_id()
-        
-        # Create trade record
+        token = None
+        if account.metadata:
+            token = account.metadata.get("token")
+        if not token:
+            token = getattr(user, "deriv_access_token", None)
+        if not token:
+            raise HTTPException(status_code=400, detail="Missing Deriv access token")
+
+        client = await pool.get_or_create(user.id, token)
+        if not client:
+            raise HTTPException(status_code=502, detail="Failed to connect to Deriv")
+
+        duration_seconds = int(request.duration_seconds)
+        duration_unit = request.duration_unit.lower()
+        if duration_unit == "ticks":
+            deriv_duration = duration_seconds
+            deriv_unit = "t"
+        elif duration_unit == "seconds":
+            deriv_duration = duration_seconds
+            deriv_unit = "s"
+        elif duration_unit == "minutes":
+            deriv_duration = max(1, int(round(duration_seconds / 60)))
+            deriv_unit = "m"
+        elif duration_unit == "hours":
+            deriv_duration = max(1, int(round(duration_seconds / 3600)))
+            deriv_unit = "h"
+        else:
+            raise HTTPException(status_code=400, detail="Invalid duration unit")
+
+        contract_type = request.contract_type.value
+        if request.direction == Direction.RISE:
+            contract_type = ContractType.CALL.value
+        elif request.direction == Direction.FALL:
+            contract_type = ContractType.PUT.value
+
+        proposal_req_id = generate_proposal_id()
+        await client.request_proposal(
+            symbol=request.symbol,
+            contract_type=contract_type,
+            amount=stake,
+            duration=deriv_duration,
+            duration_unit=deriv_unit,
+            currency=account.currency,
+            req_id=proposal_req_id,
+        )
+
+        proposal = await client.wait_for_event(
+            "proposal",
+            predicate=lambda e: e.get("raw", {}).get("req_id") == proposal_req_id,
+            timeout=15,
+        )
+        if proposal and proposal.get("event") == "error":
+            raise HTTPException(status_code=502, detail=proposal.get("message", "Deriv error"))
+        if not proposal:
+            raise HTTPException(status_code=502, detail="Deriv proposal timeout")
+
+        buy_req_id = generate_proposal_id()
+        await client.buy_contract(
+            proposal_id=proposal["id"],
+            price=proposal["ask_price"],
+            req_id=buy_req_id,
+        )
+        buy = await client.wait_for_event(
+            "buy",
+            predicate=lambda e: e.get("raw", {}).get("req_id") == buy_req_id,
+            timeout=15,
+        )
+        if buy and buy.get("event") == "error":
+            raise HTTPException(status_code=502, detail=buy.get("message", "Deriv error"))
+        if not buy:
+            raise HTTPException(status_code=502, detail="Deriv buy timeout")
+        if not buy.get("contract_id"):
+            raise HTTPException(status_code=502, detail="Deriv buy missing contract id")
+
         trade = await sync_to_async(create_trade)(
             user=user,
-            contract_type=request.contract_type.value,
+            contract_type=contract_type,
             direction=request.direction.value,
             stake=stake,
             account=account,
-            duration_seconds=request.duration_seconds,
-            proposal_id=proposal_id,
+            duration_seconds=duration_seconds,
+            proposal_id=proposal["id"],
         )
-        
+        trade.transaction_id = str(buy.get("transaction_id") or "")
+        await sync_to_async(trade.save)(update_fields=["transaction_id", "updated_at"])
+
         log_info(
             "Trade executed",
             user_id=user.id,
             trade_id=trade.id,
             stake=str(stake),
             direction=request.direction.value,
+            proposal_id=proposal["id"],
+            transaction_id=buy.get("transaction_id"),
         )
 
-        async def _close_after_duration():
-            try:
-                duration = int(request.duration_seconds or 0)
-                if duration <= 0:
-                    return
-                duration_unit = (request.duration_unit or "seconds").lower()
+        await client.subscribe_open_contract(buy["contract_id"])
 
-                # Determine entry price from latest tick
-                symbol = request.symbol
-                entry_price = None
-                if http_request and symbol:
-                    ticks = http_request.app.state.market_ticks.get(symbol, [])
-                    if ticks:
-                        entry_price = Decimal(str(ticks[-1].get("price", 0)))
+        timeout_seconds = 120
+        if duration_unit in {"seconds", "minutes", "hours"}:
+            timeout_seconds = max(30, duration_seconds + 30)
+        elif duration_unit == "ticks":
+            timeout_seconds = max(30, min(300, duration_seconds * 5))
 
-                if duration_unit == "ticks" and http_request and symbol:
-                    start_len = len(http_request.app.state.market_ticks.get(symbol, []))
-                    target = start_len + duration
-                    timeout = 120
-                    waited = 0
-                    while len(http_request.app.state.market_ticks.get(symbol, [])) < target and waited < timeout:
-                        await asyncio.sleep(0.2)
-                        waited += 0.2
-                else:
-                    if duration_unit == "minutes":
-                        duration *= 60
-                    elif duration_unit == "hours":
-                        duration *= 3600
-                    await asyncio.sleep(duration)
-
-                end_price = entry_price
-                if http_request and symbol:
-                    ticks = http_request.app.state.market_ticks.get(symbol, [])
-                    if ticks:
-                        end_price = Decimal(str(ticks[-1].get("price", 0)))
-
-                payout = stake
-                if entry_price is not None and end_price is not None:
-                    if request.direction.value == "RISE":
-                        payout = stake * Decimal("1.8") if end_price > entry_price else Decimal("0")
-                    else:
-                        payout = stake * Decimal("1.8") if end_price < entry_price else Decimal("0")
-
-                await sync_to_async(close_trade)(trade, payout, None)
-            except Exception as e:
-                log_error("Auto close failed", exception=e, trade_id=trade.id)
-
-        if request.duration_seconds:
-            asyncio.create_task(_close_after_duration())
+        contract_update = await client.wait_for_event(
+            "proposal_open_contract",
+            predicate=lambda e: e.get("contract_id") == buy.get("contract_id") and e.get("is_sold"),
+            timeout=timeout_seconds,
+        )
+        if contract_update and contract_update.get("event") == "error":
+            log_error("Deriv contract error", code=contract_update.get("code"))
+        elif contract_update:
+            payout = contract_update.get("payout")
+            profit = contract_update.get("profit")
+            payout_value = None
+            if payout is not None:
+                payout_value = Decimal(str(payout))
+            elif profit is not None:
+                payout_value = stake + Decimal(str(profit))
+            if payout_value is not None:
+                await sync_to_async(close_trade)(
+                    trade,
+                    payout_value,
+                    str(buy.get("transaction_id") or ""),
+                )
+                await sync_to_async(trade.refresh_from_db)()
         
         return TradeResponse(
             id=trade.id,

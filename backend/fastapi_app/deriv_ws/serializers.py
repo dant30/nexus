@@ -187,6 +187,59 @@ class DerivSerializer:
             "count": 60,
             "end": "latest",
         }
+
+    @staticmethod
+    def serialize_proposal(
+        symbol: str,
+        contract_type: str,
+        amount: Decimal,
+        duration: int,
+        duration_unit: str,
+        currency: str,
+        req_id: Optional[str] = None,
+        **kwargs
+    ) -> Dict[str, Any]:
+        """
+        Serialize contract proposal request.
+
+        Args:
+        - symbol: Trading symbol (e.g., "R_50")
+        - contract_type: "CALL" or "PUT"
+        - amount: Stake amount
+        - duration: Contract duration (in duration_unit)
+        - duration_unit: "t" | "s" | "m" | "h"
+        - currency: Account currency (e.g., "USD")
+        - req_id: Optional request id for correlation
+        """
+        payload = {
+            "proposal": 1,
+            "amount": float(amount),
+            "basis": "stake",
+            "contract_type": contract_type,
+            "currency": currency,
+            "duration": int(duration),
+            "duration_unit": duration_unit,
+            "symbol": symbol,
+        }
+        if req_id is not None:
+            payload["req_id"] = req_id
+        return payload
+
+    @staticmethod
+    def serialize_subscribe_open_contract(
+        contract_id: int,
+        req_id: Optional[str] = None,
+        **kwargs
+    ) -> Dict[str, Any]:
+        """Serialize proposal_open_contract subscription request."""
+        payload = {
+            "proposal_open_contract": 1,
+            "contract_id": contract_id,
+            "subscribe": 1,
+        }
+        if req_id is not None:
+            payload["req_id"] = req_id
+        return payload
     
     @staticmethod
     def serialize_buy_contract(
@@ -298,6 +351,7 @@ class DerivSerializer:
             
             proposal = data["proposal"]
             return {
+                "event": "proposal",
                 "id": proposal.get("id"),
                 "symbol": proposal.get("symbol"),
                 "payout": Decimal(str(proposal.get("payout", 0))),
@@ -309,4 +363,44 @@ class DerivSerializer:
             }
         except Exception as e:
             log_error("Failed to deserialize proposal", exception=e)
+            return None
+
+    @staticmethod
+    def deserialize_buy(data: Dict[str, Any]) -> Optional[Dict]:
+        """Deserialize buy response."""
+        try:
+            if "buy" not in data:
+                return None
+            buy = data["buy"]
+            return {
+                "event": "buy",
+                "contract_id": buy.get("contract_id"),
+                "transaction_id": buy.get("transaction_id"),
+                "buy_price": buy.get("buy_price"),
+                "raw": data,
+            }
+        except Exception as e:
+            log_error("Failed to deserialize buy", exception=e)
+            return None
+
+    @staticmethod
+    def deserialize_open_contract(data: Dict[str, Any]) -> Optional[Dict]:
+        """Deserialize proposal_open_contract updates."""
+        try:
+            if "proposal_open_contract" not in data:
+                return None
+            contract = data["proposal_open_contract"]
+            return {
+                "event": "proposal_open_contract",
+                "contract_id": contract.get("contract_id"),
+                "is_sold": contract.get("is_sold"),
+                "status": contract.get("status"),
+                "profit": contract.get("profit"),
+                "payout": contract.get("payout"),
+                "entry_tick": contract.get("entry_tick"),
+                "exit_tick": contract.get("exit_tick"),
+                "raw": data,
+            }
+        except Exception as e:
+            log_error("Failed to deserialize open contract", exception=e)
             return None
