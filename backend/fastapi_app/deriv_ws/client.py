@@ -135,9 +135,12 @@ class DerivWebSocketClient:
         """
         try:
             request = {
-                "candles": symbol,
+                "ticks_history": symbol,
+                "style": "candles",
                 "subscribe": 1,
                 "granularity": granularity,
+                "count": 60,
+                "end": "latest",
             }
 
             await self.send(request)

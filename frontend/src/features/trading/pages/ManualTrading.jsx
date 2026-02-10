@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from "react";
 import { MarketSelector } from "../components/TradePanel/MarketSelector.jsx";
-import { ContractSelector } from "../components/TradePanel/ContractSelector.jsx";
 import { StakeInput } from "../components/TradePanel/StakeInput.jsx";
 import { SignalDisplay } from "../components/TradePanel/SignalDisplay.jsx";
 import { RiskWarning } from "../components/TradePanel/RiskWarning.jsx";
@@ -22,6 +21,7 @@ export function ManualTrading() {
   const [market, setMarket] = useState("R_50");
   const [contractType, setContractType] = useState(TRADING.CONTRACT_TYPES[0].value);
   const [direction, setDirection] = useState(TRADING.DIRECTIONS[0].value);
+  const [tradeType, setTradeType] = useState("CALL_PUT");
   const [stake, setStake] = useState(TRADING.DEFAULT_STAKE);
   const { timeframeSeconds, setTimeframeSeconds } = useTradingContext();
 
@@ -39,8 +39,14 @@ export function ManualTrading() {
   );
 
   const handleContractChange = (next) => {
-    if (next.contractType) setContractType(next.contractType);
-    if (next.direction) setDirection(next.direction);
+    if (next.contractType) {
+      setContractType(next.contractType);
+      setDirection(next.contractType === "CALL" ? "RISE" : "FALL");
+    }
+    if (next.direction) {
+      setDirection(next.direction);
+      setContractType(next.direction === "RISE" ? "CALL" : "PUT");
+    }
   };
 
   const numericStake = Number(stake);
@@ -71,11 +77,42 @@ export function ManualTrading() {
         <Card className="space-y-4">
           <div className="text-sm font-semibold text-white/80">Manual Trade</div>
           <MarketSelector value={market} onChange={setMarket} />
-          <ContractSelector
-            contractType={contractType}
-            direction={direction}
-            onChange={handleContractChange}
-          />
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-white/70">Trade Type</label>
+            <Select value={tradeType} onChange={(event) => setTradeType(event.target.value)}>
+              <option value="CALL_PUT">Call/Put</option>
+              <option value="RISE_FALL">Rise/Fall</option>
+            </Select>
+          </div>
+          {tradeType === "CALL_PUT" ? (
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-white/70">Call/Put</label>
+              <Select
+                value={contractType}
+                onChange={(event) => handleContractChange({ contractType: event.target.value })}
+              >
+                {TRADING.CONTRACT_TYPES.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          ) : (
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-white/70">Rise/Fall</label>
+              <Select
+                value={direction}
+                onChange={(event) => handleContractChange({ direction: event.target.value })}
+              >
+                {TRADING.DIRECTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          )}
           <div>
             <label className="mb-1 block text-xs font-semibold text-white/70">Timeframe</label>
             <Select

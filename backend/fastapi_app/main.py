@@ -383,7 +383,7 @@ async def handle_ws_message(websocket: WebSocket, user_id: int, account_id: int,
         subscription = app.state.ws_subscriptions.get(connection_id, {}).get(symbol)
         candles = []
         if subscription:
-            candles = app.state.market_candles.get(subscription.get("deriv_symbol"), [])
+            candles = app.state.market_candles.get(subscription.get("symbol"), [])
         if not candles:
             ticks = subscription["ticks"] if subscription else app.state.market_ticks.get(symbol, [])
             candles = _build_candles(ticks, interval, count=60)

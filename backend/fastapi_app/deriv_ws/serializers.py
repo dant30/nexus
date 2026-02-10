@@ -180,9 +180,12 @@ class DerivSerializer:
         - Subscription request dict
         """
         return {
-            "candles": symbol,
+            "ticks_history": symbol,
+            "style": "candles",
             "subscribe": 1,
             "granularity": granularity,
+            "count": 60,
+            "end": "latest",
         }
     
     @staticmethod
