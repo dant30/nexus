@@ -1,3 +1,4 @@
+// fronted/src/core/api/client.js
 /**
  * HTTP Client with JWT Authentication & Token Refresh
  * Handles all API requests with automatic token refresh

@@ -1,10 +1,11 @@
+// frontend/src/provider/AuthProvider.jsx
 /**
  * Auth Provider Context
  * Manages authentication state and provides auth methods
  */
 
 import React, { createContext, useState, useCallback, useEffect } from "react";
-import { apiClient } from "../api/client.js";
+import { apiClient } from "../core/api/client.js";
 import { API_ENDPOINTS } from "../constants/api.js";
 import AuthStorage from "../storage/auth.js";
 import { handleAPIError } from "../api/errorHandler.js";
