@@ -8,7 +8,7 @@ export function SignalDisplay({ signal }) {
     return (
       <Card>
         <CardHeader className="text-white/70">Signal</CardHeader>
-        <CardBody className="text-white/50">No signal available.</CardBody>
+        <CardBody className="text-white/50">Awaiting live signals...</CardBody>
       </Card>
     );
   }

@@ -96,6 +96,7 @@ export const useMarketData = (symbol, timeframeSeconds = 60) => {
     const interval = Math.max(60, timeframeSeconds || 60);
     subscribeTick(symbol, { interval });
     sendMessage("market_snapshot", { symbol, interval });
+    sendMessage("signals_snapshot");
     const offTick = onMessage("tick", handleTick);
     const offCandles = onMessage("candles", handleCandle);
     const offCandle = onMessage("candle", handleCandle);

@@ -15,7 +15,9 @@ import { PriceChart } from "../components/Charts/PriceChart.jsx";
 import { CandlestickChart } from "../components/Charts/CandlestickChart.jsx";
 import { TickChart } from "../components/Charts/TickChart.jsx";
 import { Select } from "../../../shared/components/ui/inputs/Select.jsx";
+import { Input } from "../../../shared/components/ui/inputs/Input.jsx";
 import { useTradingContext } from "../contexts/TradingContext.jsx";
+import { TradeTypeSelector } from "../components/TradePanel/TradeTypeSelector.jsx";
 
 export function ManualTrading() {
   const [market, setMarket] = useState("R_50");
@@ -23,6 +25,8 @@ export function ManualTrading() {
   const [direction, setDirection] = useState(TRADING.DIRECTIONS[0].value);
   const [tradeType, setTradeType] = useState("CALL_PUT");
   const [stake, setStake] = useState(TRADING.DEFAULT_STAKE);
+  const [durationValue, setDurationValue] = useState(5);
+  const [durationUnit, setDurationUnit] = useState("minutes");
   const { timeframeSeconds, setTimeframeSeconds } = useTradingContext();
 
   const { signals } = useSignals();
@@ -33,10 +37,22 @@ export function ManualTrading() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pendingTrade, setPendingTrade] = useState(null);
 
-  const topSignal = useMemo(
-    () => signals?.find((signal) => signal.symbol === market) || signals?.[0],
-    [signals, market]
-  );
+  const topSignal = useMemo(() => {
+    const liveSignal = signals?.find((signal) => signal.symbol === market) || signals?.[0];
+    if (liveSignal) return liveSignal;
+    const recentTicks = marketData?.ticks?.slice(-10) || [];
+    if (recentTicks.length < 2) return null;
+    const first = Number(recentTicks[0].price);
+    const last = Number(recentTicks[recentTicks.length - 1].price);
+    return {
+      id: `local-${market}`,
+      symbol: market,
+      direction: last >= first ? "RISE" : "FALL",
+      confidence: 0.6,
+      timeframe: "live",
+      source: "Market Ticks",
+    };
+  }, [signals, market, marketData?.ticks]);
 
   const handleContractChange = (next) => {
     if (next.contractType) {
@@ -52,6 +68,14 @@ export function ManualTrading() {
   const numericStake = Number(stake);
   const stakeIsValid = isStakeValid(numericStake);
 
+  const resolveDurationSeconds = () => {
+    const value = Math.max(1, Number(durationValue) || 1);
+    if (durationUnit === "ticks") return value;
+    if (durationUnit === "seconds") return value;
+    if (durationUnit === "minutes") return value * 60;
+    return value * 3600;
+  };
+
   const submitTrade = async () => {
     if (!stakeIsValid || !activeAccount?.id) return;
     setPendingTrade({
@@ -59,7 +83,8 @@ export function ManualTrading() {
       contract_type: contractType,
       direction,
       stake: numericStake,
-      duration_seconds: 300,
+      duration_seconds: resolveDurationSeconds(),
+      duration_unit: durationUnit,
     });
     setConfirmOpen(true);
   };
@@ -77,42 +102,13 @@ export function ManualTrading() {
         <Card className="space-y-4">
           <div className="text-sm font-semibold text-white/80">Manual Trade</div>
           <MarketSelector value={market} onChange={setMarket} />
-          <div>
-            <label className="mb-1 block text-xs font-semibold text-white/70">Trade Type</label>
-            <Select value={tradeType} onChange={(event) => setTradeType(event.target.value)}>
-              <option value="CALL_PUT">Call/Put</option>
-              <option value="RISE_FALL">Rise/Fall</option>
-            </Select>
-          </div>
-          {tradeType === "CALL_PUT" ? (
-            <div>
-              <label className="mb-1 block text-xs font-semibold text-white/70">Call/Put</label>
-              <Select
-                value={contractType}
-                onChange={(event) => handleContractChange({ contractType: event.target.value })}
-              >
-                {TRADING.CONTRACT_TYPES.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </Select>
-            </div>
-          ) : (
-            <div>
-              <label className="mb-1 block text-xs font-semibold text-white/70">Rise/Fall</label>
-              <Select
-                value={direction}
-                onChange={(event) => handleContractChange({ direction: event.target.value })}
-              >
-                {TRADING.DIRECTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </Select>
-            </div>
-          )}
+          <TradeTypeSelector
+            tradeType={tradeType}
+            contractType={contractType}
+            direction={direction}
+            onTradeTypeChange={setTradeType}
+            onSelectionChange={handleContractChange}
+          />
           <div>
             <label className="mb-1 block text-xs font-semibold text-white/70">Timeframe</label>
             <Select
@@ -123,6 +119,27 @@ export function ManualTrading() {
               <option value={300}>5 minutes</option>
               <option value={900}>15 minutes</option>
             </Select>
+          </div>
+          <div className="grid grid-cols-[2fr_1fr] gap-3">
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-white/70">Duration</label>
+              <Input
+                type="number"
+                min="1"
+                step="1"
+                value={durationValue}
+                onChange={(event) => setDurationValue(event.target.value)}
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-white/70">Unit</label>
+              <Select value={durationUnit} onChange={(event) => setDurationUnit(event.target.value)}>
+                <option value="ticks">Ticks</option>
+                <option value="seconds">Seconds</option>
+                <option value="minutes">Minutes</option>
+                <option value="hours">Hours</option>
+              </Select>
+            </div>
           </div>
           <StakeInput
             value={stake}
@@ -163,7 +180,9 @@ export function ManualTrading() {
                 {pendingTrade.contract_type} • {pendingTrade.direction}
               </p>
               <p>Stake: {pendingTrade.stake}</p>
-              <p>Duration: {pendingTrade.duration_seconds}s</p>
+              <p>
+                Duration: {pendingTrade.duration_seconds}s ({pendingTrade.duration_unit})
+              </p>
             </div>
             <div className="mt-4 flex gap-2">
               <button

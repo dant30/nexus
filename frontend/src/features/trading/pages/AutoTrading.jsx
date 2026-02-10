@@ -10,6 +10,7 @@ import { Card } from "../../../shared/components/ui/cards/Card.jsx";
 import { Select } from "../../../shared/components/ui/inputs/Select.jsx";
 import { useTradingContext } from "../contexts/TradingContext.jsx";
 import { TRADING } from "../../../core/constants/trading.js";
+import { TradeTypeSelector } from "../components/TradePanel/TradeTypeSelector.jsx";
 
 export function AutoTrading() {
   const { start, stop } = useBot();
@@ -56,42 +57,13 @@ export function AutoTrading() {
         <Card className="space-y-4">
           <div className="text-sm font-semibold text-white/80">Auto Trading</div>
           <StrategySelector value={strategy} onChange={setStrategy} />
-          <div>
-            <label className="mb-1 block text-xs font-semibold text-white/70">Trade Type</label>
-            <Select value={tradeType} onChange={(event) => setTradeType(event.target.value)}>
-              <option value="CALL_PUT">Call/Put</option>
-              <option value="RISE_FALL">Rise/Fall</option>
-            </Select>
-          </div>
-          {tradeType === "CALL_PUT" ? (
-            <div>
-              <label className="mb-1 block text-xs font-semibold text-white/70">Call/Put</label>
-              <Select
-                value={contractType}
-                onChange={(event) => syncTradeType({ contractType: event.target.value })}
-              >
-                {TRADING.CONTRACT_TYPES.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </Select>
-            </div>
-          ) : (
-            <div>
-              <label className="mb-1 block text-xs font-semibold text-white/70">Rise/Fall</label>
-              <Select
-                value={direction}
-                onChange={(event) => syncTradeType({ direction: event.target.value })}
-              >
-                {TRADING.DIRECTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </Select>
-            </div>
-          )}
+          <TradeTypeSelector
+            tradeType={tradeType}
+            contractType={contractType}
+            direction={direction}
+            onTradeTypeChange={setTradeType}
+            onSelectionChange={syncTradeType}
+          />
           <div>
             <label className="mb-1 block text-xs font-semibold text-white/70">Signal Timeframe</label>
             <Select
