@@ -442,6 +442,8 @@ class DerivSerializer:
                 "status": contract.get("status"),
                 "profit": contract.get("profit"),
                 "payout": contract.get("payout"),
+                "buy_price": contract.get("buy_price"),
+                "sell_price": contract.get("sell_price"),
                 "entry_tick": contract.get("entry_tick"),
                 "exit_tick": contract.get("exit_tick"),
                 "raw": data,

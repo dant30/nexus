@@ -5,13 +5,25 @@ from django_core.accounts.selectors import get_default_account
 
 
 
-def create_trade(user, contract_type, direction, stake: Decimal, account=None, duration_seconds: int = None, proposal_id: str = None):
+def create_trade(
+    user,
+    contract_type,
+    direction,
+    stake: Decimal,
+    account=None,
+    duration_seconds: int = None,
+    proposal_id: str = None,
+    trade_type: str = Trade.TRADE_TYPE_CALL_PUT,
+    contract: str = Trade.CONTRACT_CALL,
+):
     # create a Trade record (does not place orders on Deriv)
     if account is None:
         account = get_default_account(user)
     t = Trade.objects.create(
         user=user,
         account=account,
+        trade_type=trade_type,
+        contract=contract,
         contract_type=contract_type,
         direction=direction,
         stake=stake,

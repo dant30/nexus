@@ -47,6 +47,22 @@ class Direction(str, Enum):
     FALL = "FALL"
 
 
+class TradeType(str, Enum):
+    """User-facing trade families."""
+    RISE_FALL = "RISE_FALL"
+    CALL_PUT = "CALL_PUT"
+
+
+class RiseFallContract(str, Enum):
+    RISE = "RISE"
+    FALL = "FALL"
+
+
+class CallPutContract(str, Enum):
+    CALL = "CALL"
+    PUT = "PUT"
+
+
 class TradeResponse(BaseModel):
     """Trade response."""
     id: int
@@ -64,17 +80,80 @@ class TradeResponse(BaseModel):
     markup_applied: str
     created_at: str
     updated_at: str
+    trade_type: Optional[str] = None
+    contract: Optional[str] = None
 
 
 
 class CreateTradeRequest(BaseModel):
-    contract_type: ContractType
-    direction: Direction
+    trade_type: Optional[TradeType] = None
+    contract: Optional[str] = None
+    # Legacy fields kept for compatibility with existing frontend payloads.
+    contract_type: Optional[ContractType] = None
+    direction: Optional[Direction] = None
     stake: condecimal(max_digits=12, decimal_places=6)
     account_id: Optional[int] = None
     duration_seconds: Optional[int] = None
     duration_unit: Optional[str] = None
     symbol: Optional[str] = None
+
+    def resolve_trade_contract(self):
+        """
+        Resolve user-facing trade choice into execution contract_type + direction.
+        Returns:
+        - trade_type_label: RISE_FALL | CALL_PUT
+        - contract_label: RISE/FALL/CALL/PUT (what user selected)
+        - deriv_contract_type: CALL | PUT (for Deriv)
+        - direction: RISE | FALL (internal directional axis)
+        """
+        trade_type = self.trade_type
+        contract = (self.contract or "").upper() if self.contract else None
+
+        if trade_type and not contract:
+            raise HTTPException(status_code=400, detail="`contract` is required when `trade_type` is set")
+        if contract and not trade_type:
+            raise HTTPException(status_code=400, detail="`trade_type` is required when `contract` is set")
+
+        if trade_type == TradeType.RISE_FALL:
+            if contract not in {RiseFallContract.RISE.value, RiseFallContract.FALL.value}:
+                raise HTTPException(status_code=400, detail="For RISE_FALL, contract must be RISE or FALL")
+            deriv_contract_type = ContractType.CALL.value if contract == RiseFallContract.RISE.value else ContractType.PUT.value
+            direction = contract
+            # Reject conflicting legacy fields if provided.
+            if self.direction and self.direction.value != direction:
+                raise HTTPException(status_code=400, detail="direction conflicts with trade_type/contract")
+            if self.contract_type and self.contract_type.value != deriv_contract_type:
+                raise HTTPException(status_code=400, detail="contract_type conflicts with trade_type/contract")
+            return trade_type.value, contract, deriv_contract_type, direction
+
+        if trade_type == TradeType.CALL_PUT:
+            if contract not in {CallPutContract.CALL.value, CallPutContract.PUT.value}:
+                raise HTTPException(status_code=400, detail="For CALL_PUT, contract must be CALL or PUT")
+            deriv_contract_type = contract
+            direction = Direction.RISE.value if contract == CallPutContract.CALL.value else Direction.FALL.value
+            if self.contract_type and self.contract_type.value != deriv_contract_type:
+                raise HTTPException(status_code=400, detail="contract_type conflicts with trade_type/contract")
+            if self.direction and self.direction.value != direction:
+                raise HTTPException(status_code=400, detail="direction conflicts with trade_type/contract")
+            return trade_type.value, contract, deriv_contract_type, direction
+
+        # Legacy payload fallback.
+        if self.direction:
+            direction = self.direction.value
+            deriv_contract_type = ContractType.CALL.value if direction == Direction.RISE.value else ContractType.PUT.value
+            if self.contract_type and self.contract_type.value != deriv_contract_type:
+                raise HTTPException(status_code=400, detail="contract_type/direction mismatch")
+            return TradeType.RISE_FALL.value, direction, deriv_contract_type, direction
+
+        if self.contract_type:
+            deriv_contract_type = self.contract_type.value
+            direction = Direction.RISE.value if deriv_contract_type == ContractType.CALL.value else Direction.FALL.value
+            return TradeType.CALL_PUT.value, deriv_contract_type, deriv_contract_type, direction
+
+        raise HTTPException(
+            status_code=400,
+            detail="Provide either (`trade_type` + `contract`) or legacy `direction` / `contract_type`",
+        )
 
 class CloseTradeRequest(BaseModel):
     payout: condecimal(max_digits=12, decimal_places=6)
@@ -102,12 +181,7 @@ async def execute_trade(
     """
     try:
         user = await sync_to_async(User.objects.get)(id=current_user.user_id)
-        
-        # Enforce Rise/Fall (Call/Put) only
-        if request.contract_type not in {ContractType.CALL, ContractType.PUT}:
-            raise HTTPException(status_code=400, detail="Only Call/Put contract types are supported")
-        if request.direction not in {Direction.RISE, Direction.FALL}:
-            raise HTTPException(status_code=400, detail="Only Rise/Fall directions are supported")
+        trade_type_label, contract_label, deriv_contract_type, direction = request.resolve_trade_contract()
 
         # Get account
         if request.account_id:
@@ -162,16 +236,10 @@ async def execute_trade(
         else:
             raise HTTPException(status_code=400, detail="Invalid duration unit")
 
-        contract_type = request.contract_type.value
-        if request.direction == Direction.RISE:
-            contract_type = ContractType.CALL.value
-        elif request.direction == Direction.FALL:
-            contract_type = ContractType.PUT.value
-
         proposal_req_id = _next_req_id()
         await client.request_proposal(
             symbol=request.symbol,
-            contract_type=contract_type,
+            contract_type=deriv_contract_type,
             amount=stake,
             duration=deriv_duration,
             duration_unit=deriv_unit,
@@ -209,12 +277,14 @@ async def execute_trade(
 
         trade = await sync_to_async(create_trade)(
             user=user,
-            contract_type=contract_type,
-            direction=request.direction.value,
+            contract_type=deriv_contract_type,
+            direction=direction,
             stake=stake,
             account=account,
             duration_seconds=duration_seconds,
             proposal_id=proposal["id"],
+            trade_type=trade_type_label,
+            contract=contract_label,
         )
         trade.transaction_id = str(buy.get("transaction_id") or "")
         await sync_to_async(trade.save)(update_fields=["transaction_id", "updated_at"])
@@ -224,7 +294,9 @@ async def execute_trade(
             user_id=user.id,
             trade_id=trade.id,
             stake=str(stake),
-            direction=request.direction.value,
+            direction=direction,
+            trade_type=trade_type_label,
+            contract=contract_label,
             proposal_id=proposal["id"],
             transaction_id=buy.get("transaction_id"),
         )
@@ -245,13 +317,25 @@ async def execute_trade(
         if contract_update and contract_update.get("event") == "error":
             log_error("Deriv contract error", code=contract_update.get("code"))
         elif contract_update:
-            payout = contract_update.get("payout")
+            # Deriv's `payout` on open_contract can be potential payout.
+            # For settled contracts, prefer final settlement fields.
+            sell_price = contract_update.get("sell_price")
             profit = contract_update.get("profit")
+            status = str(contract_update.get("status") or "").lower()
             payout_value = None
-            if payout is not None:
-                payout_value = Decimal(str(payout))
+
+            if sell_price is not None:
+                payout_value = Decimal(str(sell_price))
             elif profit is not None:
                 payout_value = stake + Decimal(str(profit))
+            elif status == "won":
+                payout_value = Decimal(str(contract_update.get("payout") or "0"))
+            elif status in {"lost", "sold"}:
+                payout_value = Decimal("0")
+
+            if payout_value is not None and payout_value < Decimal("0"):
+                payout_value = Decimal("0")
+
             if payout_value is not None:
                 await sync_to_async(close_trade)(
                     trade,
@@ -276,6 +360,8 @@ async def execute_trade(
             markup_applied=str(trade.markup_applied),
             created_at=trade.created_at.isoformat(),
             updated_at=trade.updated_at.isoformat(),
+            trade_type=trade_type_label,
+            contract=contract_label,
         )
         
     except User.DoesNotExist:
