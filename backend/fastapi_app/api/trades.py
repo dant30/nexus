@@ -567,3 +567,4 @@ async def get_trade_profit(
     except Exception as e:
         log_error("Failed to calculate profit", exception=e)
         raise HTTPException(status_code=500, detail="Calculation failed")
+
