@@ -71,20 +71,21 @@ class DerivWebSocketClient:
             
             log_info("Connected to Deriv")
             
-            # Authorize
+            # Start message loop
+            asyncio.create_task(self._message_loop())
+
+            # Authorize only after message loop is running, otherwise
+            # authorize responses cannot be consumed by wait_for_event().
             if not await self.authorize():
                 await self.disconnect()
                 self.status = WebSocketStatus.ERROR
                 return False
             
-            # Start message loop
-            asyncio.create_task(self._message_loop())
-            
             return True
         
         except Exception as e:
             log_error("Failed to connect to Deriv", exception=e)
-            self.status = WebSocketStatus.FAILED
+            self.status = WebSocketStatus.ERROR
             return False
     
     async def authorize(self) -> bool:
