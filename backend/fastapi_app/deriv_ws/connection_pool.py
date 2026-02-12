@@ -94,6 +94,36 @@ class ConnectionPool:
             await client.disconnect()
         self._clients.clear()
 
+    def broadcast(self, message):
+        """
+        Broadcast a message to all connected frontend WebSocket clients.
+
+        This schedules non-blocking asyncio tasks to send JSON to each
+        WebSocket stored in app.state.ws_connections (FastAPI/Starlette WebSocket).
+        """
+        try:
+            # Import here to avoid circular imports at module import time
+            from fastapi_app.main import app
+            from starlette.websockets import WebSocketState
+
+            connections = getattr(app.state, "ws_connections", {}) or {}
+
+            for ws in list(connections.values()):
+                async def _send(w):
+                    try:
+                        # Only send if still connected
+                        if getattr(w, "client_state", None) == WebSocketState.CONNECTED:
+                            await w.send_json(message)
+                    except Exception as e:
+                        log_error("Failed to send websocket message", exception=e)
+
+                try:
+                    asyncio.create_task(_send(ws))
+                except Exception as e:
+                    log_error("Failed to schedule websocket send", exception=e)
+
+        except Exception as e:
+            log_error("Broadcast failed", exception=e)
 
 # Global connection pool
 pool = ConnectionPool()
