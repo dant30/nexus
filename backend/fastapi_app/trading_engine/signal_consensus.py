@@ -30,8 +30,8 @@ class ConsensusSignal:
     """Final consensus signal from multiple strategies."""
     decision: ConsensusDecision
     confidence: float  # 0.0 to 1.0
-    rise_votes: int
-    fall_votes: int
+    rise_votes: float
+    fall_votes: float
     hold_votes: int
     reason: str
     timestamp: str
@@ -93,9 +93,9 @@ class SignalConsensus:
         hold_votes = 0.0
         strong_buy_count = 0
         strong_sell_count = 0
-        
+
         strategy_signals = []
-        
+
         for signal in signals:
             strategy_signals.append({
                 "strategy": getattr(signal, "strategy", "Unknown"),
@@ -103,76 +103,74 @@ class SignalConsensus:
                 "confidence": signal.confidence,
                 "reason": signal.reason,
             })
-            
+
             if signal.signal == Signal.RISE:
-                rise_votes += signal.confidence
+                rise_votes += float(signal.confidence)
                 if signal.confidence > 0.7:
                     strong_buy_count += 1
             elif signal.signal == Signal.FALL:
-                fall_votes += signal.confidence
+                fall_votes += float(signal.confidence)
                 if signal.confidence > 0.7:
                     strong_sell_count += 1
             elif signal.signal == Signal.HOLD:
                 hold_votes += 1
-        
-        # Calculate net vote
-        net_vote = rise_votes - fall_votes
-        total_votes = rise_votes + fall_votes
-        
-        # Determine consensus decision
+
+        # --- NORMALIZE: use averaged confidences per-strategy to keep votes in [0..1] ---
+        num_strategies = max(1, len(signals))
+        avg_rise = rise_votes / num_strategies
+        avg_fall = fall_votes / num_strategies
+
+        # Calculate net vote using averaged confidences
+        net_vote = avg_rise - avg_fall
+        total_votes = avg_rise + avg_fall
+
+        # Determine consensus decision using averaged values
         if total_votes == 0:
             decision = ConsensusDecision.NEUTRAL
             confidence = 0.0
             reason = "No clear signals from strategies"
-        
         elif strong_buy_count >= 2 and net_vote > 0:
             decision = ConsensusDecision.STRONG_RISE
-            confidence = min((net_vote / max(total_votes, 1)) * 0.95, 0.95)
+            confidence = min((net_vote / max(total_votes, 1e-6)) * 0.95, 0.95)
             reason = f"Strong rise consensus ({strong_buy_count} strong signals)"
-        
         elif strong_sell_count >= 2 and net_vote < 0:
             decision = ConsensusDecision.STRONG_FALL
-            confidence = min((abs(net_vote) / max(total_votes, 1)) * 0.95, 0.95)
+            confidence = min((abs(net_vote) / max(total_votes, 1e-6)) * 0.95, 0.95)
             reason = f"Strong fall consensus ({strong_sell_count} strong signals)"
-        
         elif net_vote > total_votes * 0.5:
             decision = ConsensusDecision.RISE
-            confidence = min(net_vote / max(total_votes, 1), 0.9)
+            confidence = min(net_vote / max(total_votes, 1e-6), 0.9)
             reason = f"Rise consensus ({len([s for s in signals if s.signal == Signal.RISE])} rise signals)"
-        
         elif net_vote < -total_votes * 0.5:
             decision = ConsensusDecision.FALL
-            confidence = min(abs(net_vote) / max(total_votes, 1), 0.9)
+            confidence = min(abs(net_vote) / max(total_votes, 1e-6), 0.9)
             reason = f"Fall consensus ({len([s for s in signals if s.signal == Signal.FALL])} fall signals)"
-        
         elif net_vote > 0:
             decision = ConsensusDecision.WEAK_RISE
-            confidence = net_vote / max(total_votes, 1) * 0.5
+            confidence = (net_vote / max(total_votes, 1e-6)) * 0.5
             reason = "Weak rise signal"
-        
         elif net_vote < 0:
             decision = ConsensusDecision.WEAK_FALL
-            confidence = abs(net_vote) / max(total_votes, 1) * 0.5
+            confidence = (abs(net_vote) / max(total_votes, 1e-6)) * 0.5
             reason = "Weak fall signal"
-        
         else:
             decision = ConsensusDecision.NEUTRAL
             confidence = 0.0
             reason = "Mixed signals, no consensus"
-        
+
         log_info(
             f"Consensus signal: {decision.value}",
             confidence=confidence,
-            rise_votes=rise_votes,
-            fall_votes=fall_votes,
+            rise_votes=avg_rise,
+            fall_votes=avg_fall,
             total_strategies=len(signals),
         )
-        
+
         return ConsensusSignal(
             decision=decision,
-            confidence=confidence,
-            rise_votes=int(rise_votes),
-            fall_votes=int(fall_votes),
+            confidence=float(round(confidence, 4)),
+            rise_votes=float(round(avg_rise, 4)),
+            fall_votes=float(round(avg_fall, 4)),
             hold_votes=int(hold_votes),
             reason=reason,
             timestamp=datetime.utcnow().isoformat(),

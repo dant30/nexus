@@ -6,7 +6,7 @@ import time
 from decimal import Decimal
 from enum import Enum
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, condecimal
 from asgiref.sync import sync_to_async
 
@@ -184,6 +184,7 @@ class CloseTradeRequest(BaseModel):
 @router.post("/execute", response_model=TradeResponse)
 async def execute_trade(
     payload: ExecuteTradeRequest,
+    request: Request,
     current_user: CurrentUser = Depends(get_current_user),
 ):
     """Execute a new trade."""
@@ -221,12 +222,16 @@ async def execute_trade(
         # Execute trade (via Deriv API or trading engine)
         user = await sync_to_async(User.objects.get)(id=current_user.user_id)
         trade = await _execute_trade_internal(
+            request=request,
             user=user,
             account=account,
             symbol=payload.symbol,
             direction=payload.direction.value if payload.direction else "RISE",
             stake=payload.stake,
             duration_seconds=payload.duration_seconds or 300,
+            contract_type=(payload.contract_type.value if payload.contract_type else None),
+            contract=payload.contract,
+            trade_type=payload.trade_type.value if payload.trade_type else None,
         )
 
         log_info(
@@ -247,22 +252,121 @@ async def execute_trade(
         raise HTTPException(status_code=500, detail="Trade execution failed")
 
 
-async def _execute_trade_internal(user, account, symbol, direction, stake, duration_seconds):
-    """Internal trade execution logic."""
-    from django_core.accounts.models import Account
-    
-    # Create trade record
+async def _execute_trade_internal(
+    request: Request,
+    user,
+    account,
+    symbol,
+    direction,
+    stake,
+    duration_seconds,
+    contract_type=None,
+    contract=None,
+    trade_type=None,
+):
+    """
+    Internal trade execution:
+    1. create DB trade (OPEN)
+    2. request proposal from Deriv (if deriv_client available)
+    3. buy contract if proposal acceptable
+    4. update trade with proposal_id / transaction_id
+    5. broadcast WS trade_status to connected clients
+    """
+    from django_core.trades.services import create_trade
+    app = request.app
+
+    # create local trade record (does not block execution)
     trade = await sync_to_async(create_trade)(
         user=user,
-        account=account,
-        symbol=symbol,
-        contract_type="CALL" if direction == "RISE" else "PUT",
+        contract_type=contract_type or ("CALL" if direction == "RISE" else "PUT"),
         direction=direction,
-        stake=stake,
+        stake=Decimal(stake),
+        account=account,
         duration_seconds=duration_seconds,
-        status=Trade.STATUS_OPEN,
+        proposal_id=None,
+        trade_type=trade_type or ( "RISE_FALL" if direction in ("RISE","FALL") else "CALL_PUT"),
+        contract=contract or ( "CALL" if direction == "RISE" else "PUT"),
     )
-    
+
+    # If no deriv client configured, return created trade (recorded but not executed)
+    deriv_client = getattr(app.state, "deriv_client", None)
+    if not deriv_client:
+        log_info("Deriv client not available - trade recorded only", trade_id=trade.id)
+        return trade
+
+    # Request proposal with a req_id for correlation
+    req_id = generate_proposal_id()
+    try:
+        ok = await deriv_client.request_proposal(
+            symbol=symbol,
+            contract_type=contract_type or ( "CALL" if direction == "RISE" else "PUT"),
+            amount=Decimal(stake),
+            duration=duration_seconds,
+            duration_unit="s",  # adapt if your serializer expects different units
+            currency=getattr(account, "currency", "USD"),
+            req_id=req_id,
+        )
+    except Exception as exc:
+        log_error("Proposal request failed", exception=exc, trade_id=trade.id)
+        return trade
+
+    # Wait for proposal event (client may implement wait_for_event)
+    proposal = None
+    try:
+        # wait_for_event should return the processed proposal dict (see DerivSerializer.deserialize_proposal)
+        proposal = await deriv_client.wait_for_event("proposal", lambda ev: ev.get("id") == req_id, timeout=5)
+    except Exception:
+        proposal = None
+
+    if not proposal:
+        log_info("No proposal received; leaving trade as OPEN", trade_id=trade.id)
+        return trade
+
+    # Attempt buy using proposal id and ask_price
+    buy_ok = False
+    transaction_id = None
+    try:
+        proposal_id = proposal.get("id") or proposal.get("proposal_id")
+        ask_price = proposal.get("ask_price") or proposal.get("ask") or proposal.get("ask_price")
+        await deriv_client.buy_contract(proposal_id, float(ask_price), req_id=req_id)
+        # Wait for buy confirmation if client exposes wait_for_event
+        buy_evt = await deriv_client.wait_for_event("buy", lambda ev: ev.get("proposal_id") == proposal_id, timeout=5)
+        if buy_evt:
+            transaction_id = buy_evt.get("transaction_id") or buy_evt.get("buy_id") or buy_evt.get("id")
+            buy_ok = True
+    except Exception as exc:
+        log_error("Buy request failed", exception=exc, trade_id=trade.id)
+
+    # Persist proposal_id / transaction_id on trade
+    if proposal:
+        trade.proposal_id = str(proposal.get("id") or proposal.get("proposal_id"))
+    if transaction_id:
+        trade.transaction_id = str(transaction_id)
+    await sync_to_async(trade.save)()
+
+    # Broadcast trade_status to connected WS clients (simple loop over subscriptions)
+    try:
+        payload = {
+            "type": "trade_status",
+            "trade_id": trade.id,
+            "status": trade.status,
+            "proposal_id": trade.proposal_id,
+            "transaction_id": trade.transaction_id,
+            "stake": str(trade.stake),
+            "payout": str(trade.payout) if trade.payout else None,
+        }
+        # broadcast to all WS connections interested in this account
+        for connection_id, websocket in list(app.state.ws_connections.items()):
+            # simple check: connection id format "user_account"
+            if str(trade.account_id) in connection_id:
+                try:
+                    await websocket.send_json(payload)
+                except Exception:
+                    # best-effort broadcast
+                    pass
+    except Exception:
+        log_error("Failed to broadcast trade_status", trade_id=trade.id)
+
     return trade
 
 
