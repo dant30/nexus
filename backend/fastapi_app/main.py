@@ -83,8 +83,8 @@ async def lifespan(app: FastAPI):
                 app.state.market_ticks.setdefault(deriv_symbol, []).append(payload)
                 app.state.market_ticks[deriv_symbol] = app.state.market_ticks[deriv_symbol][-600:]
 
-            for connection_id, subscriptions in app.state.ws_subscriptions.items():
-                for subscription in subscriptions.values():
+            for connection_id, subscriptions in list(app.state.ws_subscriptions.items()):
+                for subscription in list(subscriptions.values()):
                     if subscription.get("symbol") != deriv_symbol:
                         continue
                     websocket = app.state.ws_connections.get(connection_id)
@@ -251,6 +251,7 @@ app.include_router(oauth_routes.router, prefix="/api/v1/oauth", tags=["OAuth"])
 # WebSocket Endpoints
 # ============================================================================
 from fastapi import WebSocket, WebSocketDisconnect
+from starlette.websockets import WebSocketState
 
 def _build_candles(ticks, interval: int, count: int = 60):
     if not ticks:
@@ -311,8 +312,46 @@ async def _signal_from_engine(symbol: str, ticks: list, candles: list, interval:
     }
 
 
+def _prune_disconnected_websocket(websocket: WebSocket, reason: str = "disconnected"):
+    stale_connection_ids = [
+        connection_id
+        for connection_id, ws in app.state.ws_connections.items()
+        if ws is websocket
+    ]
+    if not stale_connection_ids:
+        return
+
+    for connection_id in stale_connection_ids:
+        app.state.ws_connections.pop(connection_id, None)
+        app.state.ws_subscriptions.pop(connection_id, None)
+
+    log_info(
+        "Pruned disconnected WebSocket",
+        connection_ids=",".join(stale_connection_ids),
+        reason=reason,
+        total_connections=len(app.state.ws_connections),
+    )
+
+
 async def _send_event(websocket: WebSocket, event_type: str, data):
-    await websocket.send_json({"type": event_type, "data": data})
+    if websocket.client_state != WebSocketState.CONNECTED:
+        _prune_disconnected_websocket(websocket, reason="client_state_not_connected")
+        return False
+    try:
+        await websocket.send_json({"type": event_type, "data": data})
+        return True
+    except Exception as exc:
+        message = str(exc)
+        if (
+            "ConnectionClosed" in exc.__class__.__name__
+            or "going away" in message
+            or "closed" in message.lower()
+        ):
+            _prune_disconnected_websocket(websocket, reason="send_on_closed_socket")
+            return False
+        log_error("Failed to send WS event", exception=exc, event_type=event_type)
+        _prune_disconnected_websocket(websocket, reason="send_error")
+        return False
 
 
 @app.websocket("/ws/trading/{user_id}/{account_id}")

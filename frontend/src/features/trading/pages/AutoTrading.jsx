@@ -16,6 +16,7 @@ import { useSignals } from "../hooks/useSignals.js";
 import { useTrading } from "../hooks/useTrading.js";
 import { useMarketData } from "../hooks/useMarketData.js";
 import { useAccountContext } from "../../accounts/contexts/AccountContext.jsx";
+import { useWebSocket } from "../../../providers/WSProvider.jsx";
 
 const STRATEGY_SIGNAL_KEYS = {
   scalping: "ScalpingStrategy",
@@ -72,8 +73,9 @@ const extractSignalDecision = (signal, strategy) => {
 
 export function AutoTrading() {
   const { running, setRunning, strategy, setStrategy, setLastEvent } = useBotContext();
-  const { timeframeSeconds, setTimeframeSeconds, openTrades } = useTradingContext();
+  const { timeframeSeconds, setTimeframeSeconds, openTrades, refresh } = useTradingContext();
   const { activeAccount } = useAccountContext();
+  const { sendMessage, connected } = useWebSocket();
 
   const [market, setMarket] = useState("R_50");
   const [stake, setStake] = useState(5);
@@ -104,6 +106,8 @@ export function AutoTrading() {
 
   const lastTradeKeyRef = useRef(null);
   const inFlightRef = useRef(false);
+  const lastSignalsRequestRef = useRef(0);
+  const lastTradesRefreshRef = useRef(0);
 
   const handleTradeTypeChange = (nextTradeType) => {
     setTradeType(nextTradeType);
@@ -142,8 +146,17 @@ export function AutoTrading() {
     setCooldownUntil(0);
     setDailyLossUsed(0);
     lastTradeKeyRef.current = null;
+    lastSignalsRequestRef.current = 0;
+    lastTradesRefreshRef.current = 0;
 
     setRunning(true);
+    if (connected) {
+      sendMessage("signals_snapshot");
+      sendMessage("market_snapshot", { symbol: market, interval: timeframeSeconds });
+    }
+    if (refresh) {
+      refresh().catch(() => null);
+    }
     setLastEvent({
       message: `Bot started on ${market} (${tradeType} ${contract}) with ${Math.round(
         normalizedMinConfidence * 100
@@ -158,6 +171,17 @@ export function AutoTrading() {
     const timer = setInterval(async () => {
       if (inFlightRef.current) return;
       if (!canRun) return;
+
+      const now = Date.now();
+      if (connected && now - lastSignalsRequestRef.current >= LOOP_INTERVAL_MS) {
+        sendMessage("signals_snapshot");
+        lastSignalsRequestRef.current = now;
+      }
+
+      if (refresh && now - lastTradesRefreshRef.current >= 5000) {
+        lastTradesRefreshRef.current = now;
+        await refresh().catch(() => null);
+      }
 
       if (sessionTrades >= normalizedMaxTradesPerSession) {
         setRunning(false);
@@ -202,7 +226,7 @@ export function AutoTrading() {
       );
       if (!signalDirection) {
         setLastEvent({
-          message: "No actionable signal yet.",
+          message: "No actionable signal yet (waiting for a fresh signal snapshot).",
           timestamp: Date.now(),
         });
         return;
@@ -299,6 +323,9 @@ export function AutoTrading() {
     execute,
     setLastEvent,
     setRunning,
+    refresh,
+    sendMessage,
+    connected,
   ]);
 
   return (

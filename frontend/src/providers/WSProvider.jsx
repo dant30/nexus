@@ -92,12 +92,12 @@ export function WSProvider({ children }) {
     };
   }, [user, activeAccount?.id]);
 
-  const subscribeTick = useCallback((symbol) => {
-    return wsManager.subscribeTicks(symbol);
+  const subscribeTick = useCallback((symbol, options = {}) => {
+    return wsManager.subscribeTicks(symbol, options);
   }, []);
 
-  const unsubscribeTick = useCallback((symbol) => {
-    return wsManager.unsubscribeTicks(symbol);
+  const unsubscribeTick = useCallback((symbol, options = {}) => {
+    return wsManager.unsubscribeTicks(symbol, options);
   }, []);
 
   const sendMessage = useCallback((type, data) => {
