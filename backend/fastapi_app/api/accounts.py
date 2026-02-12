@@ -19,6 +19,7 @@ from django_core.accounts.services import create_demo_account, create_or_update_
 from fastapi_app.deps import get_current_user, CurrentUser
 from fastapi_app.oauth.deriv_oauth import DerivOAuthClient
 from shared.utils.logger import log_info, log_error, get_logger
+from fastapi_app.deriv_ws.handlers import broadcast_balance_update
 
 logger = get_logger("accounts")
 User = get_user_model()
@@ -277,6 +278,15 @@ async def get_account_balance_live(
             await sync_to_async(account.save)(
                 update_fields=["balance", "currency", "updated_at"]
             )
+
+        live_balance = float(account.balance)
+
+        # Push to websockets (best-effort)
+        try:
+            broadcast_balance_update(account_id, live_balance)
+        except Exception:
+            # silent fail — keep endpoint behaviour unchanged
+            pass
 
         return {
             "account_id": account.id,

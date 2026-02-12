@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useState } from "react";
 import { useAuth } from "../../auth/contexts/AuthContext.jsx";
 import {
   getAccountBalance,
@@ -101,21 +101,31 @@ export function AccountProvider({ children }) {
     }
   };
 
-  return (
-    <AccountContext.Provider
-      value={{
-        accounts,
-        setAccounts,
-        activeAccount,
-        setActiveAccount,
-        balanceLoading,
-        switching,
-        switchAccount,
-      }}
-    >
-      {children}
-    </AccountContext.Provider>
-  );
+  const updateLiveBalance = (accountId, nextBalance) => {
+    setAccounts((prev) =>
+      prev.map((a) =>
+        Number(a.id) === Number(accountId) ? { ...a, balance: nextBalance } : a
+      )
+    );
+    setActiveAccount((prev) =>
+      prev && Number(prev.id) === Number(accountId) ? { ...prev, balance: nextBalance } : prev
+    );
+  };
+
+  const value = {
+    accounts,
+    setAccounts,
+    activeAccount,
+    setActiveAccount,
+    balanceLoading,
+    switching,
+    switchAccount,
+    updateLiveBalance,
+  };
+
+  return <AccountContext.Provider value={value}>{children}</AccountContext.Provider>;
 }
 
-export const useAccountContext = () => useContext(AccountContext);
+export function useAccountContext() {
+  return useContext(AccountContext);
+}

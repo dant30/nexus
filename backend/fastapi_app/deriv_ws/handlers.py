@@ -2,6 +2,7 @@
 Event handlers for Deriv WebSocket messages.
 """
 from typing import Dict, Any, Callable, Optional
+import json
 
 from .events import DerivEventType
 from .serializers import DerivSerializer
@@ -148,3 +149,20 @@ class DerivEventHandler:
             "code": code,
             "message": message,
         }
+
+def broadcast_balance_update(account_id: int, balance: float):
+    """
+    Broadcast a balance update to all relevant websocket clients.
+    Message format: {"type":"balance_update","data":{"account_id": ..., "balance": ...}}
+    """
+    try:
+        msg = {"type": "balance_update", "data": {"account_id": account_id, "balance": balance}}
+        # connection_pool broadcast helper — connection_pool should expose a broadcast/json-send method
+        try:
+            connection_pool.broadcast(msg)
+        except Exception:
+            # fallback: stringify
+            connection_pool.broadcast(json.dumps(msg))
+        log_info("Broadcasted balance update", account_id=account_id, balance=balance)
+    except Exception as e:
+        log_error("Failed to broadcast balance update", exception=e)
