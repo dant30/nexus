@@ -79,6 +79,15 @@ async def lifespan(app: FastAPI):
             elif event == "ohlc":
                 app.state.market_candles.setdefault(deriv_symbol, []).append(payload)
                 app.state.market_candles[deriv_symbol] = app.state.market_candles[deriv_symbol][-600:]
+            elif event == "balance":
+                # Broadcast balance update to all connected WS clients.
+                # Frontend should filter by active account_id / currency as needed.
+                for connection_id, websocket in list(app.state.ws_connections.items()):
+                    try:
+                        await _send_event(websocket, "balance", payload)
+                    except Exception as e:
+                        log_error("Failed to send balance event", exception=e, connection_id=connection_id)
+                return
             else:
                 app.state.market_ticks.setdefault(deriv_symbol, []).append(payload)
                 app.state.market_ticks[deriv_symbol] = app.state.market_ticks[deriv_symbol][-600:]
