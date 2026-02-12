@@ -401,6 +401,8 @@ async def list_trades(
                 markup_applied=str(trade.markup_applied),
                 created_at=trade.created_at.isoformat(),
                 updated_at=trade.updated_at.isoformat(),
+                trade_type=getattr(trade, 'trade_type', None) or ('RISE_FALL' if trade.direction in ('RISE', 'FALL') else 'CALL_PUT'),
+                contract=getattr(trade, 'contract', None) or (trade.direction if trade.direction in ('RISE', 'FALL') else trade.contract_type),
             )
             for trade in trades[offset:]
         ]
@@ -436,6 +438,8 @@ async def list_open_trades(current_user: CurrentUser = Depends(get_current_user)
                 markup_applied=str(trade.markup_applied),
                 created_at=trade.created_at.isoformat(),
                 updated_at=trade.updated_at.isoformat(),
+                trade_type=getattr(trade, 'trade_type', None) or ('RISE_FALL' if trade.direction in ('RISE', 'FALL') else 'CALL_PUT'),
+                contract=getattr(trade, 'contract', None) or (trade.direction if trade.direction in ('RISE', 'FALL') else trade.contract_type),
             )
             for trade in trades
         ]
@@ -474,6 +478,8 @@ async def get_trade(
             markup_applied=str(trade.markup_applied),
             created_at=trade.created_at.isoformat(),
             updated_at=trade.updated_at.isoformat(),
+            trade_type=getattr(trade, 'trade_type', None) or ('RISE_FALL' if trade.direction in ('RISE', 'FALL') else 'CALL_PUT'),
+            contract=getattr(trade, 'contract', None) or (trade.direction if trade.direction in ('RISE', 'FALL') else trade.contract_type),
         )
         
     except Trade.DoesNotExist:
@@ -528,6 +534,8 @@ async def close_trade_endpoint(
             markup_applied=str(trade.markup_applied),
             created_at=trade.created_at.isoformat(),
             updated_at=trade.updated_at.isoformat(),
+            trade_type=getattr(trade, 'trade_type', None) or ('RISE_FALL' if trade.direction in ('RISE', 'FALL') else 'CALL_PUT'),
+            contract=getattr(trade, 'contract', None) or (trade.direction if trade.direction in ('RISE', 'FALL') else trade.contract_type),
         )
         
     except Trade.DoesNotExist:
