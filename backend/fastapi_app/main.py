@@ -433,23 +433,60 @@ async def _maybe_execute_bot_trade(
 
     decision, confidence = _extract_signal_decision(signal, bot_state.get("strategy"))
     if decision not in {"RISE", "FALL"}:
+        log_info(
+            "Bot skipped trade: no actionable direction",
+            connection_id=connection_id,
+            strategy=bot_state.get("strategy"),
+            symbol=signal.get("symbol"),
+        )
         return
     if confidence < float(bot_state.get("min_confidence", 0.5)):
+        log_info(
+            "Bot skipped trade: confidence below threshold",
+            connection_id=connection_id,
+            confidence=confidence,
+            min_confidence=bot_state.get("min_confidence", 0.5),
+            symbol=signal.get("symbol"),
+            decision=decision,
+        )
         return
 
     configured_direction = bot_state.get("direction")
     if configured_direction and configured_direction != decision:
+        log_info(
+            "Bot skipped trade: signal direction mismatch",
+            connection_id=connection_id,
+            configured_direction=configured_direction,
+            signal_direction=decision,
+            symbol=signal.get("symbol"),
+        )
         return
 
     signal_id = signal.get("id") or f"{signal.get('symbol')}-{decision}"
     trade_key = (
         f"{signal_id}:{decision}:{bot_state.get('symbol')}:{bot_state.get('duration_seconds')}:"
-        f"{bot_state.get('trade_type')}:{bot_state.get('contract')}"
+        f"{bot_state.get('stake')}"
     )
     if bot_state.get("last_trade_key") == trade_key:
         return
 
     from fastapi_app.api.trades import _execute_trade_internal
+
+    execution_contract_type = "CALL" if decision == "RISE" else "PUT"
+    execution_trade_type = "RISE_FALL"
+    execution_contract = decision
+
+    log_info(
+        "Bot executing trade",
+        connection_id=connection_id,
+        account_id=account_id,
+        symbol=bot_state.get("symbol"),
+        decision=decision,
+        confidence=confidence,
+        stake=bot_state.get("stake"),
+        duration_seconds=bot_state.get("duration_seconds"),
+        contract_type=execution_contract_type,
+    )
 
     user = await sync_to_async(User.objects.get)(id=user_id)
     trade = await _execute_trade_internal(
@@ -460,9 +497,9 @@ async def _maybe_execute_bot_trade(
         direction=decision,
         stake=Decimal(str(bot_state.get("stake"))),
         duration_seconds=int(bot_state.get("duration_seconds", 60)),
-        contract_type="CALL" if decision == "RISE" else "PUT",
-        contract=bot_state.get("contract"),
-        trade_type=bot_state.get("trade_type"),
+        contract_type=execution_contract_type,
+        contract=execution_contract,
+        trade_type=execution_trade_type,
     )
 
     bot_state["last_trade_key"] = trade_key
@@ -655,9 +692,10 @@ async def handle_ws_message(websocket: WebSocket, user_id: int, account_id: int,
         await _stop_bot(connection_id, reason="restart", notify=False)
         symbol = data.get("symbol")
         interval = int(data.get("interval") or 60)
+        follow_signal_direction = bool(data.get("follow_signal_direction", True))
         trade_type = (data.get("trade_type") or "RISE_FALL").upper()
         contract = (data.get("contract") or "RISE").upper()
-        direction = _resolve_direction_from_trade_config(trade_type, contract)
+        direction = None if follow_signal_direction else _resolve_direction_from_trade_config(trade_type, contract)
         bot_state = {
             "enabled": True,
             "symbol": symbol,
@@ -667,6 +705,7 @@ async def handle_ws_message(websocket: WebSocket, user_id: int, account_id: int,
             "trade_type": trade_type,
             "contract": contract,
             "direction": direction,
+            "follow_signal_direction": follow_signal_direction,
             "strategy": (data.get("strategy") or "scalping").lower(),
             "min_confidence": float(data.get("min_confidence") or 0.5),
             "cooldown_seconds": int(data.get("cooldown_seconds") or 0),

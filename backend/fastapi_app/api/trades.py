@@ -187,69 +187,16 @@ async def execute_trade(
     request: Request,
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    """Execute a new trade."""
-    try:
-        # Log incoming request
-        log_info(
-            "Trade execution requested",
-            user_id=current_user.user_id,
-            account_id=payload.account_id,
-            symbol=payload.symbol,
-            direction=payload.direction,
-            stake=str(payload.stake),
-        )
-
-        # Validate account ownership
-        account = await sync_to_async(Account.objects.get)(
-            id=payload.account_id,
-            user_id=current_user.user_id
-        )
-
-        # Check balance
-        if account.balance < payload.stake:
-            log_error(
-                "Insufficient balance",
-                user_id=current_user.user_id,
-                account_id=payload.account_id,
-                balance=str(account.balance),
-                stake=str(payload.stake)
-            )
-            raise HTTPException(
-                status_code=400,
-                detail="Insufficient balance for this trade"
-            )
-
-        # Execute trade (via Deriv API or trading engine)
-        user = await sync_to_async(User.objects.get)(id=current_user.user_id)
-        trade = await _execute_trade_internal(
-            app=request.app,
-            user=user,
-            account=account,
-            symbol=payload.symbol,
-            direction=payload.direction.value if payload.direction else "RISE",
-            stake=payload.stake,
-            duration_seconds=payload.duration_seconds or 300,
-            contract_type=(payload.contract_type.value if payload.contract_type else None),
-            contract=payload.contract,
-            trade_type=payload.trade_type.value if payload.trade_type else None,
-        )
-
-        log_info(
-            "Trade executed successfully",
-            trade_id=trade.id,
-            user_id=current_user.user_id,
-            account_id=account.id,
-        )
-
-        return TradeResponse.from_orm(trade)
-
-    except Account.DoesNotExist:
-        raise HTTPException(status_code=404, detail="Account not found")
-    except HTTPException:
-        raise
-    except Exception as e:
-        log_error("Trade execution error", exception=e, user_id=current_user.user_id)
-        raise HTTPException(status_code=500, detail="Trade execution failed")
+    """Manual execution endpoint disabled. Auto bot execution only."""
+    log_info(
+        "Manual trade execute blocked",
+        user_id=current_user.user_id,
+        account_id=payload.account_id,
+    )
+    raise HTTPException(
+        status_code=403,
+        detail="Manual trade execution is disabled. Use auto bot start/stop via WebSocket.",
+    )
 
 
 async def _execute_trade_internal(
@@ -274,6 +221,14 @@ async def _execute_trade_internal(
     """
     from django_core.trades.services import create_trade
     # create local trade record (does not block execution)
+    log_info(
+        "Executing trade internally",
+        account_id=getattr(account, "id", None),
+        symbol=symbol,
+        direction=direction,
+        stake=str(stake),
+        duration_seconds=duration_seconds,
+    )
     trade = await sync_to_async(create_trade)(
         user=user,
         contract_type=contract_type or ("CALL" if direction == "RISE" else "PUT"),
@@ -295,6 +250,13 @@ async def _execute_trade_internal(
     # Request proposal with a req_id for correlation
     req_id = generate_proposal_id()
     try:
+        log_info(
+            "Sending Deriv proposal request",
+            trade_id=trade.id,
+            symbol=symbol,
+            contract_type=contract_type or ("CALL" if direction == "RISE" else "PUT"),
+            req_id=req_id,
+        )
         ok = await deriv_client.request_proposal(
             symbol=symbol,
             contract_type=contract_type or ( "CALL" if direction == "RISE" else "PUT"),
@@ -326,6 +288,13 @@ async def _execute_trade_internal(
     try:
         proposal_id = proposal.get("id") or proposal.get("proposal_id")
         ask_price = proposal.get("ask_price") or proposal.get("ask") or proposal.get("ask_price")
+        log_info(
+            "Sending Deriv buy request",
+            trade_id=trade.id,
+            proposal_id=proposal_id,
+            ask_price=ask_price,
+            req_id=req_id,
+        )
         await deriv_client.buy_contract(proposal_id, float(ask_price), req_id=req_id)
         # Wait for buy confirmation if client exposes wait_for_event
         buy_evt = await deriv_client.wait_for_event("buy", lambda ev: ev.get("proposal_id") == proposal_id, timeout=5)

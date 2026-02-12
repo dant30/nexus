@@ -11,7 +11,6 @@ import { Select } from "../../../shared/components/ui/inputs/Select.jsx";
 import { Input } from "../../../shared/components/ui/inputs/Input.jsx";
 import { useTradingContext } from "../contexts/TradingContext.jsx";
 import { TRADING } from "../../../core/constants/trading.js";
-import { TradeTypeSelector } from "../components/TradePanel/TradeTypeSelector.jsx";
 import { useSignals } from "../hooks/useSignals.js";
 import { useMarketData } from "../hooks/useMarketData.js";
 import { useAccountContext } from "../../accounts/contexts/AccountContext.jsx";
@@ -39,10 +38,6 @@ export function AutoTrading() {
   const [market, setMarket] = useState("R_50");
   const [stake, setStake] = useState(5);
   const [dailyLimit, setDailyLimit] = useState(50);
-  const [tradeType, setTradeType] = useState(TRADING.TRADE_TYPES[0].value);
-  const [contract, setContract] = useState(
-    TRADING.TRADE_TYPE_CONTRACTS[TRADING.TRADE_TYPES[0].value][0].value
-  );
   const [durationValue, setDurationValue] = useState(1);
   const [durationUnit, setDurationUnit] = useState("ticks");
   const [cooldownSeconds, setCooldownSeconds] = useState(10);
@@ -77,14 +72,6 @@ export function AutoTrading() {
     () => (signals || []).find((signal) => signal.symbol === market) || null,
     [signals, market]
   );
-
-  const handleTradeTypeChange = (nextTradeType) => {
-    setTradeType(nextTradeType);
-    const defaultContract = TRADING.TRADE_TYPE_CONTRACTS[nextTradeType]?.[0]?.value;
-    if (defaultContract) {
-      setContract(defaultContract);
-    }
-  };
 
   const normalizedCooldownSeconds = Math.max(0, Math.floor(toNumber(cooldownSeconds, 0)));
   const normalizedMaxTradesPerSession = Math.max(1, Math.floor(toNumber(maxTradesPerSession, 1)));
@@ -126,8 +113,7 @@ export function AutoTrading() {
         interval: timeframeSeconds,
         stake: Number(stake),
         duration_seconds: durationSeconds,
-        trade_type: tradeType,
-        contract,
+        follow_signal_direction: true,
         strategy,
         min_confidence: normalizedMinConfidence,
         cooldown_seconds: normalizedCooldownSeconds,
@@ -136,7 +122,7 @@ export function AutoTrading() {
       });
       setRunning(true);
       setLastEvent({
-        message: `Bot started on ${market} (${tradeType} ${contract}).`,
+        message: `Bot started on ${market} (auto-follow signal direction).`,
         timestamp: Date.now(),
       });
     } finally {
@@ -151,12 +137,6 @@ export function AutoTrading() {
           <div className="text-sm font-semibold text-white/80">Auto Trading</div>
           <MarketSelector value={market} onChange={setMarket} />
           <StrategySelector value={strategy} onChange={setStrategy} />
-          <TradeTypeSelector
-            tradeType={tradeType}
-            contract={contract}
-            onTradeTypeChange={handleTradeTypeChange}
-            onContractChange={setContract}
-          />
           <div className="grid grid-cols-[2fr_1fr] gap-3">
             <div>
               <label className="mb-1 block text-xs font-semibold text-white/70">Duration</label>

@@ -40,7 +40,6 @@ export const API_ENDPOINTS = {
 
   // Trades
   TRADES: {
-    EXECUTE: `${API_BASE_URL}/trades/execute`,
     LIST: `${API_BASE_URL}/trades/`,
     OPEN: `${API_BASE_URL}/trades/open`,
     GET: (id) => `${API_BASE_URL}/trades/${id}`,
