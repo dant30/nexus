@@ -78,14 +78,14 @@ class Settings:
     # Trading Configuration
     MIN_STAKE: float = env.get_float("MIN_STAKE", 0.35)
     MAX_STAKE: float = env.get_float("MAX_STAKE", 1000.00)
-    DEFAULT_STAKE: float = env.get_float("DEFAULT_STAKE", 1.00)
+    DEFAULT_STAKE: float = env.get_float("DEFAULT_STAKE", 0.35)
     
     # Risk Management
     MAX_DAILY_LOSS: float = env.get_float("MAX_DAILY_LOSS", 100.00)
     FIBONACCI_SEQUENCE: List[float] = [1.0, 1.5, 2.25, 3.375, 5.0, 7.5, 10.0]
     
     # Signal Configuration
-    MIN_SIGNAL_CONFIDENCE: float = 0.70
+    MIN_SIGNAL_CONFIDENCE: float = 0.60
     MIN_CONSENSUS_SIGNALS: int = 2
     
     # Logging
