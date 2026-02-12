@@ -12,9 +12,11 @@ class WebSocketManager {
     this.url = null;
     this.reconnectAttempts = 0;
     this.reconnectTimer = null;
+    this.heartbeatTimer = null;
     this.isIntentionallyClosed = false;
     this.messageHandlers = {};
     this.connectionListeners = [];
+    this.activeSubscriptions = new Map();
   }
 
   /**
@@ -23,30 +25,53 @@ class WebSocketManager {
   async connect(url) {
     return new Promise((resolve, reject) => {
       try {
+        if (this.isConnected() && this.url === url) {
+          resolve();
+          return;
+        }
+
+        if (this.reconnectTimer) {
+          clearTimeout(this.reconnectTimer);
+          this.reconnectTimer = null;
+        }
+
+        if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
+          this.isIntentionallyClosed = true;
+          this.ws.close();
+        }
+
         this.url = url;
         this.isIntentionallyClosed = false;
-        this.ws = new WebSocket(url);
+        const socket = new WebSocket(url);
+        this.ws = socket;
 
-        this.ws.onopen = () => {
+        socket.onopen = () => {
+          if (this.ws !== socket) return;
           console.log("[WebSocket] Connected:", url);
           this.reconnectAttempts = 0;
           this.emitConnectionEvent("connected");
+          this.resubscribeAll();
           resolve();
         };
 
-        this.ws.onmessage = (event) => {
+        socket.onmessage = (event) => {
+          if (this.ws !== socket) return;
           this.handleMessage(JSON.parse(event.data));
         };
 
-        this.ws.onerror = (error) => {
+        socket.onerror = (error) => {
+          if (this.ws !== socket) return;
           console.error("[WebSocket] Error:", error);
           this.emitConnectionEvent("error", error);
           reject(error);
         };
 
-        this.ws.onclose = () => {
+        socket.onclose = () => {
+          if (this.ws !== socket) return;
           console.log("[WebSocket] Disconnected");
           this.emitConnectionEvent("disconnected");
+          this.stopHeartbeat();
+          this.ws = null;
 
           // Auto-reconnect if not intentionally closed
           if (!this.isIntentionallyClosed) {
@@ -69,7 +94,9 @@ class WebSocketManager {
     this.isIntentionallyClosed = true;
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
     }
+    this.stopHeartbeat();
     if (this.ws) {
       this.ws.close();
     }
@@ -199,25 +226,70 @@ class WebSocketManager {
    * Start heartbeat to keep connection alive
    */
   startHeartbeat() {
-    setInterval(() => {
+    this.stopHeartbeat();
+    this.heartbeatTimer = setInterval(() => {
       if (this.isConnected()) {
         this.send("ping");
       }
     }, WS_CONFIG.HEARTBEAT_INTERVAL);
   }
 
+  stopHeartbeat() {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
+  }
+
+  subscriptionKey(symbol, options = {}) {
+    const interval = options.interval ?? "";
+    return `${symbol}:${interval}`;
+  }
+
+  resubscribeAll() {
+    this.activeSubscriptions.forEach((entry) => {
+      this.send("subscribe", {
+        symbol: entry.symbol,
+        ...entry.options,
+      });
+    });
+  }
+
   /**
    * Subscribe to market ticks
    */
   subscribeTicks(symbol, options = {}) {
-    return this.send("subscribe", { type: "subscribe", symbol, ...options });
+    const key = this.subscriptionKey(symbol, options);
+    const existing = this.activeSubscriptions.get(key);
+    if (existing) {
+      existing.count += 1;
+      return true;
+    }
+
+    this.activeSubscriptions.set(key, {
+      symbol,
+      options,
+      count: 1,
+    });
+
+    return this.send("subscribe", { symbol, ...options });
   }
 
   /**
    * Unsubscribe from ticks
    */
   unsubscribeTicks(symbol, options = {}) {
-    return this.send("unsubscribe", { type: "unsubscribe", symbol, ...options });
+    const key = this.subscriptionKey(symbol, options);
+    const existing = this.activeSubscriptions.get(key);
+    if (!existing) return true;
+
+    if (existing.count > 1) {
+      existing.count -= 1;
+      return true;
+    }
+
+    this.activeSubscriptions.delete(key);
+    return this.send("unsubscribe", { symbol, ...options });
   }
 
   /**

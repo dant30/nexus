@@ -24,12 +24,10 @@ export function SignalDisplay({ signal }) {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-semibold text-white">{signal.symbol}</p>
-              <p className="text-xs text-white/60">
-                No clear signal â€¢ {signal.timeframe}
-              </p>
+              <p className="text-xs text-white/60">No clear signal - {signal.timeframe}</p>
             </div>
             <div className="text-right">
-              <p className="text-sm font-semibold text-white/40">â€”</p>
+              <p className="text-sm font-semibold text-white/40">-</p>
               <p className="text-xs text-white/60">{signal.source}</p>
             </div>
           </div>
@@ -46,7 +44,7 @@ export function SignalDisplay({ signal }) {
           <div>
             <p className="text-sm font-semibold text-white">{signal.symbol}</p>
             <p className="text-xs text-white/60">
-              {signal.direction === "RISE" ? "Rise" : signal.direction === "FALL" ? "Fall" : signal.direction} •{" "}
+              {signal.direction === "RISE" ? "Rise" : signal.direction === "FALL" ? "Fall" : signal.direction} -{" "}
               {signal.timeframe}
             </p>
           </div>

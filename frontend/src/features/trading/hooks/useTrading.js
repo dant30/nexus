@@ -12,6 +12,7 @@ const normalizeError = (error) => {
 
   if (status === 401) return "Session expired. Please log in again.";
   if (status === 404 && detail) return detail;
+  if (status === 502 && detail) return detail;
   if (status === 400 && detail) {
     const lower = detail.toLowerCase();
     if (lower.includes("minimum stake")) return detail;
@@ -34,20 +35,6 @@ export const useTrading = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [lastTrade, setLastTrade] = useState(null);
-
-  const resolveLegacyFields = useCallback((tradeType, contract) => {
-    if (tradeType === "RISE_FALL") {
-      return {
-        direction: contract,
-        contract_type: contract === "RISE" ? "CALL" : "PUT",
-      };
-    }
-
-    return {
-      contract_type: contract,
-      direction: contract === "CALL" ? "RISE" : "FALL",
-    };
-  }, []);
 
   const execute = useCallback(
     async (payload) => {
@@ -74,10 +61,6 @@ export const useTrading = () => {
           }
         }
 
-        const legacy = selectedTradeType
-          ? resolveLegacyFields(selectedTradeType, selectedContract)
-          : {};
-
         const normalizedPayload = {
           duration_seconds: 300,
           ...payload,
@@ -87,17 +70,27 @@ export const useTrading = () => {
                 contract: selectedContract,
               }
             : {}),
-          ...legacy,
           stake: payload?.stake ?? TRADING.DEFAULT_STAKE,
           account_id: payload?.account_id ?? activeAccount?.id,
         };
 
+        if (selectedTradeType) {
+          delete normalizedPayload.direction;
+          delete normalizedPayload.contract_type;
+        }
+
         const data = await executeTrade(normalizedPayload);
-        setLastTrade(data);
+        const normalizedData = {
+          ...data,
+          trade_type: data?.trade_type || selectedTradeType || null,
+          contract: data?.contract || selectedContract || null,
+        };
+
+        setLastTrade(normalizedData);
         if (refresh) {
           refresh();
         }
-        return { ok: true, data };
+        return { ok: true, data: normalizedData };
       } catch (err) {
         const message = normalizeError(err);
         setError(message);
@@ -106,7 +99,7 @@ export const useTrading = () => {
         setLoading(false);
       }
     },
-    [activeAccount?.id, refresh, resolveLegacyFields]
+    [activeAccount?.id, refresh]
   );
 
   return { execute, loading, error, lastTrade };

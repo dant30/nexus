@@ -5,19 +5,29 @@ import { useAuth } from "../../auth/contexts/AuthContext.jsx";
 const TradingContext = createContext(null);
 
 const normalizeTradeShape = (trade = {}) => {
-  const direction = trade.direction;
-  const contractType = trade.contract_type;
+  const direction = String(trade.direction || "").toUpperCase();
+  const contractType = String(trade.contract_type || "").toUpperCase();
+  const explicitTradeType = String(trade.trade_type || "").toUpperCase();
+  const explicitContract = String(trade.contract || "").toUpperCase();
+  const contractLooksLikeCallPut =
+    explicitContract === "CALL" ||
+    explicitContract === "PUT" ||
+    contractType === "CALL" ||
+    contractType === "PUT";
 
   const inferredTradeType =
-    trade.trade_type ||
-    (direction === "RISE" || direction === "FALL" ? "RISE_FALL" : "CALL_PUT");
+    explicitTradeType === "RISE_FALL" || explicitTradeType === "CALL_PUT"
+      ? explicitTradeType
+      : contractLooksLikeCallPut
+        ? "CALL_PUT"
+        : "RISE_FALL";
 
-  let inferredContract = trade.contract;
+  let inferredContract = explicitContract;
   if (!inferredContract) {
-    if (inferredTradeType === "RISE_FALL") {
-      inferredContract = direction;
+    if (inferredTradeType === "CALL_PUT") {
+      inferredContract = contractType === "PUT" ? "PUT" : "CALL";
     } else {
-      inferredContract = contractType;
+      inferredContract = direction === "FALL" ? "FALL" : "RISE";
     }
   }
 

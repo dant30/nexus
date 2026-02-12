@@ -8,7 +8,6 @@ export const useMarketData = (symbol, timeframeSeconds = 60) => {
   const { subscribeTick, unsubscribeTick, onMessage, connected, sendMessage } = useWebSocket();
   const [ticks, setTicks] = useState([]);
   const [candles, setCandles] = useState([]);
-  const [error, setError] = useState(null);
 
   const handleTick = useCallback(
     (payload, message) => {
@@ -95,5 +94,5 @@ export const useMarketData = (symbol, timeframeSeconds = 60) => {
 
   const data = useMemo(() => ({ symbol, ticks, candles }), [symbol, ticks, candles]);
 
-  return { data, loading: !connected, error };
+  return { data, loading: !connected, error: null };
 };

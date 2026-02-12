@@ -9,17 +9,17 @@ export function SignalCard({ signal }) {
       <div className="flex items-center justify-between">
         <span className="text-sm font-semibold text-white">{signal.symbol}</span>
         <span className={isNeutral ? "text-white/40" : "text-emerald-300"}>
-          {isNeutral ? "â€”" : `${(signal.confidence * 100).toFixed(0)}%`}
+          {isNeutral ? "-" : `${(signal.confidence * 100).toFixed(0)}%`}
         </span>
       </div>
       <div className="mt-1 text-white/60">
         {isNeutral
-          ? `No clear signal â€¢ ${signal.timeframe} â€¢ ${signal.source}`
+          ? `No clear signal - ${signal.timeframe} - ${signal.source}`
           : `${
               (signal.direction === "RISE" && "Rise") ||
               (signal.direction === "FALL" && "Fall") ||
               signal.direction
-            } â€¢ ${signal.timeframe} â€¢ ${signal.source}`}
+            } - ${signal.timeframe} - ${signal.source}`}
       </div>
     </div>
   );
