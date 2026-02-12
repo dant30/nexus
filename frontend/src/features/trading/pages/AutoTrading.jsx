@@ -18,19 +18,31 @@ export function AutoTrading() {
   const { timeframeSeconds, setTimeframeSeconds } = useTradingContext();
   const [stake, setStake] = useState(5);
   const [dailyLimit, setDailyLimit] = useState(50);
-  const [tradeType, setTradeType] = useState("CALL_PUT");
-  const [contractType, setContractType] = useState(TRADING.CONTRACT_TYPES[0].value);
-  const [direction, setDirection] = useState(TRADING.DIRECTIONS[0].value);
+  const [tradeType, setTradeType] = useState(TRADING.TRADE_TYPES[0].value);
+  const [contract, setContract] = useState(
+    TRADING.TRADE_TYPE_CONTRACTS[TRADING.TRADE_TYPES[0].value][0].value
+  );
 
-  const syncTradeType = (next) => {
-    if (next.contractType) {
-      setContractType(next.contractType);
-      setDirection(next.contractType === "CALL" ? "RISE" : "FALL");
+  const handleTradeTypeChange = (nextTradeType) => {
+    setTradeType(nextTradeType);
+    const defaultContract = TRADING.TRADE_TYPE_CONTRACTS[nextTradeType]?.[0]?.value;
+    if (defaultContract) {
+      setContract(defaultContract);
     }
-    if (next.direction) {
-      setDirection(next.direction);
-      setContractType(next.direction === "RISE" ? "CALL" : "PUT");
+  };
+
+  const deriveLegacyFields = (selectedTradeType, selectedContract) => {
+    if (selectedTradeType === "RISE_FALL") {
+      return {
+        direction: selectedContract,
+        contract_type: selectedContract === "RISE" ? "CALL" : "PUT",
+      };
     }
+
+    return {
+      contract_type: selectedContract,
+      direction: selectedContract === "CALL" ? "RISE" : "FALL",
+    };
   };
 
   const toggleBot = async () => {
@@ -39,12 +51,14 @@ export function AutoTrading() {
       setRunning(false);
       setLastEvent({ message: "Bot stopped", timestamp: Date.now() });
     } else {
+      const legacy = deriveLegacyFields(tradeType, contract);
       await start({
         strategy,
         stake,
         daily_limit: dailyLimit,
-        contract_type: contractType,
-        direction,
+        trade_type: tradeType,
+        contract,
+        ...legacy,
       });
       setRunning(true);
       setLastEvent({ message: "Bot started", timestamp: Date.now() });
@@ -59,10 +73,9 @@ export function AutoTrading() {
           <StrategySelector value={strategy} onChange={setStrategy} />
           <TradeTypeSelector
             tradeType={tradeType}
-            contractType={contractType}
-            direction={direction}
-            onTradeTypeChange={setTradeType}
-            onSelectionChange={syncTradeType}
+            contract={contract}
+            onTradeTypeChange={handleTradeTypeChange}
+            onContractChange={setContract}
           />
           <div>
             <label className="mb-1 block text-xs font-semibold text-white/70">Signal Timeframe</label>

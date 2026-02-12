@@ -21,9 +21,10 @@ import { TradeTypeSelector } from "../components/TradePanel/TradeTypeSelector.js
 
 export function ManualTrading() {
   const [market, setMarket] = useState("R_50");
-  const [contractType, setContractType] = useState(TRADING.CONTRACT_TYPES[0].value);
-  const [direction, setDirection] = useState(TRADING.DIRECTIONS[0].value);
-  const [tradeType, setTradeType] = useState("CALL_PUT");
+  const [tradeType, setTradeType] = useState(TRADING.TRADE_TYPES[0].value);
+  const [contract, setContract] = useState(
+    TRADING.TRADE_TYPE_CONTRACTS[TRADING.TRADE_TYPES[0].value][0].value
+  );
   const [stake, setStake] = useState(TRADING.DEFAULT_STAKE);
   const [durationValue, setDurationValue] = useState(5);
   const [durationUnit, setDurationUnit] = useState("minutes");
@@ -54,14 +55,11 @@ export function ManualTrading() {
     };
   }, [signals, market, marketData?.ticks]);
 
-  const handleContractChange = (next) => {
-    if (next.contractType) {
-      setContractType(next.contractType);
-      setDirection(next.contractType === "CALL" ? "RISE" : "FALL");
-    }
-    if (next.direction) {
-      setDirection(next.direction);
-      setContractType(next.direction === "RISE" ? "CALL" : "PUT");
+  const handleTradeTypeChange = (nextTradeType) => {
+    setTradeType(nextTradeType);
+    const defaultContract = TRADING.TRADE_TYPE_CONTRACTS[nextTradeType]?.[0]?.value;
+    if (defaultContract) {
+      setContract(defaultContract);
     }
   };
 
@@ -78,12 +76,14 @@ export function ManualTrading() {
 
   const submitTrade = async () => {
     if (!stakeIsValid || !activeAccount?.id) return;
+    const normalizedDurationValue = Math.max(1, Number(durationValue) || 1);
     setPendingTrade({
       symbol: market,
-      contract_type: contractType,
-      direction,
+      trade_type: tradeType,
+      contract,
       stake: numericStake,
       duration_seconds: resolveDurationSeconds(),
+      duration_value: normalizedDurationValue,
       duration_unit: durationUnit,
     });
     setConfirmOpen(true);
@@ -104,10 +104,9 @@ export function ManualTrading() {
           <MarketSelector value={market} onChange={setMarket} />
           <TradeTypeSelector
             tradeType={tradeType}
-            contractType={contractType}
-            direction={direction}
-            onTradeTypeChange={setTradeType}
-            onSelectionChange={handleContractChange}
+            contract={contract}
+            onTradeTypeChange={handleTradeTypeChange}
+            onContractChange={setContract}
           />
           <div>
             <label className="mb-1 block text-xs font-semibold text-white/70">Timeframe</label>
@@ -153,7 +152,10 @@ export function ManualTrading() {
           )}
           {error && <p className="text-xs text-rose-300">{error}</p>}
           {lastTrade && (
-            <p className="text-xs text-emerald-300">Trade #{lastTrade.id} created.</p>
+            <p className="text-xs text-emerald-300">
+              Trade #{lastTrade.id} created (
+              {lastTrade.trade_type || "RISE_FALL"} {lastTrade.contract || lastTrade.direction}).
+            </p>
           )}
           <TradeButton
             loading={loading}
@@ -177,11 +179,11 @@ export function ManualTrading() {
             <div className="mt-3 space-y-1 text-xs text-white/70">
               <p>Market: {pendingTrade.symbol}</p>
               <p>
-                {pendingTrade.contract_type} • {pendingTrade.direction}
+                {pendingTrade.trade_type} | {pendingTrade.contract}
               </p>
               <p>Stake: {pendingTrade.stake}</p>
               <p>
-                Duration: {pendingTrade.duration_seconds}s ({pendingTrade.duration_unit})
+                Duration: {pendingTrade.duration_value} {pendingTrade.duration_unit}
               </p>
             </div>
             <div className="mt-4 flex gap-2">

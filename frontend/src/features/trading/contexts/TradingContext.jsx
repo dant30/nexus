@@ -4,6 +4,30 @@ import { useAuth } from "../../auth/contexts/AuthContext.jsx";
 
 const TradingContext = createContext(null);
 
+const normalizeTradeShape = (trade = {}) => {
+  const direction = trade.direction;
+  const contractType = trade.contract_type;
+
+  const inferredTradeType =
+    trade.trade_type ||
+    (direction === "RISE" || direction === "FALL" ? "RISE_FALL" : "CALL_PUT");
+
+  let inferredContract = trade.contract;
+  if (!inferredContract) {
+    if (inferredTradeType === "RISE_FALL") {
+      inferredContract = direction;
+    } else {
+      inferredContract = contractType;
+    }
+  }
+
+  return {
+    ...trade,
+    trade_type: inferredTradeType,
+    contract: inferredContract,
+  };
+};
+
 export function TradingProvider({ children }) {
   const [trades, setTrades] = useState([]);
   const [openTrades, setOpenTrades] = useState([]);
@@ -33,8 +57,8 @@ export function TradingProvider({ children }) {
         listTrades({ limit: 50 }).catch(() => []),
         listOpenTrades().catch(() => []),
       ]);
-      setTrades(allTrades || []);
-      setOpenTrades(open || []);
+      setTrades((allTrades || []).map(normalizeTradeShape));
+      setOpenTrades((open || []).map(normalizeTradeShape));
     } catch (err) {
       setError(err?.message || "Unable to load trades.");
     } finally {

@@ -35,23 +35,59 @@ export const useTrading = () => {
   const [error, setError] = useState(null);
   const [lastTrade, setLastTrade] = useState(null);
 
+  const resolveLegacyFields = useCallback((tradeType, contract) => {
+    if (tradeType === "RISE_FALL") {
+      return {
+        direction: contract,
+        contract_type: contract === "RISE" ? "CALL" : "PUT",
+      };
+    }
+
+    return {
+      contract_type: contract,
+      direction: contract === "CALL" ? "RISE" : "FALL",
+    };
+  }, []);
+
   const execute = useCallback(
     async (payload) => {
       setLoading(true);
       setError(null);
       try {
-        const allowedContracts = new Set(TRADING.CONTRACT_TYPES.map((c) => c.value));
-        const allowedDirections = new Set(TRADING.DIRECTIONS.map((d) => d.value));
-        if (payload?.contract_type && !allowedContracts.has(payload.contract_type)) {
-          throw new Error("Only Call/Put contract types are supported.");
+        const selectedTradeType = payload?.trade_type ?? payload?.tradeType;
+        const selectedContract = payload?.contract;
+
+        if (selectedTradeType) {
+          const allowedTradeTypes = new Set(TRADING.TRADE_TYPES.map((type) => type.value));
+          if (!allowedTradeTypes.has(selectedTradeType)) {
+            throw new Error("Invalid trade type.");
+          }
+
+          const allowedContracts =
+            TRADING.TRADE_TYPE_CONTRACTS[selectedTradeType]?.map((option) => option.value) || [];
+          if (!allowedContracts.includes(selectedContract)) {
+            throw new Error(
+              selectedTradeType === "RISE_FALL"
+                ? "For Rise/Fall, contract must be Rise or Fall."
+                : "For Call/Put, contract must be Call or Put."
+            );
+          }
         }
-        if (payload?.direction && !allowedDirections.has(payload.direction)) {
-          throw new Error("Only Rise/Fall directions are supported.");
-        }
+
+        const legacy = selectedTradeType
+          ? resolveLegacyFields(selectedTradeType, selectedContract)
+          : {};
 
         const normalizedPayload = {
           duration_seconds: 300,
           ...payload,
+          ...(selectedTradeType
+            ? {
+                trade_type: selectedTradeType,
+                contract: selectedContract,
+              }
+            : {}),
+          ...legacy,
           stake: payload?.stake ?? TRADING.DEFAULT_STAKE,
           account_id: payload?.account_id ?? activeAccount?.id,
         };
@@ -70,7 +106,7 @@ export const useTrading = () => {
         setLoading(false);
       }
     },
-    [activeAccount?.id]
+    [activeAccount?.id, refresh, resolveLegacyFields]
   );
 
   return { execute, loading, error, lastTrade };
