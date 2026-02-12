@@ -50,6 +50,7 @@ class AppState:
     ws_subscriptions = {}
     deriv_client = None
     deriv_subscriptions = set()
+    deriv_candle_subscriptions = set()
     market_ticks = {}
     market_candles = {}
 
@@ -363,12 +364,15 @@ def _extract_signal_decision(signal: dict, strategy: str):
     }
     strategy_key = strategy_map.get((strategy or "").lower())
     entries = signal.get("strategies") or []
+    consensus = signal.get("consensus") or {}
+    consensus_confidence = float(consensus.get("confidence") or signal.get("confidence") or 0)
     if strategy_key:
         match = next((entry for entry in entries if entry.get("strategy") == strategy_key), None)
         if match and match.get("signal") in {"RISE", "FALL"}:
-            return match.get("signal"), float(match.get("confidence") or 0)
+            strategy_confidence = float(match.get("confidence") or 0)
+            # Direction from selected strategy, confidence gate from strongest available evidence.
+            return match.get("signal"), max(strategy_confidence, consensus_confidence)
 
-    consensus = signal.get("consensus") or {}
     decision = consensus.get("decision") or signal.get("direction")
     if decision in {"RISE", "FALL"}:
         return decision, float(consensus.get("confidence") or signal.get("confidence") or 0)
@@ -411,6 +415,12 @@ async def _maybe_execute_bot_trade(
         return
 
     if bot_state.get("symbol") != signal.get("symbol"):
+        log_info(
+            "Bot skipped trade: symbol mismatch",
+            connection_id=connection_id,
+            bot_symbol=bot_state.get("symbol"),
+            signal_symbol=signal.get("symbol"),
+        )
         return
 
     if bot_state.get("session_trades", 0) >= bot_state.get("max_trades_per_session", 1):
@@ -419,6 +429,12 @@ async def _maybe_execute_bot_trade(
 
     now = time.time()
     if now < float(bot_state.get("cooldown_until", 0)):
+        log_info(
+            "Bot skipped trade: cooldown active",
+            connection_id=connection_id,
+            cooldown_until=bot_state.get("cooldown_until"),
+            now=now,
+        )
         return
 
     has_open_trade = await sync_to_async(
@@ -429,6 +445,11 @@ async def _maybe_execute_bot_trade(
         ).exists()
     )()
     if has_open_trade:
+        log_info(
+            "Bot skipped trade: open trade exists",
+            connection_id=connection_id,
+            account_id=account_id,
+        )
         return
 
     decision, confidence = _extract_signal_decision(signal, bot_state.get("strategy"))
@@ -468,6 +489,11 @@ async def _maybe_execute_bot_trade(
         f"{bot_state.get('stake')}"
     )
     if bot_state.get("last_trade_key") == trade_key:
+        log_info(
+            "Bot skipped trade: duplicate signal key",
+            connection_id=connection_id,
+            trade_key=trade_key,
+        )
         return
 
     from fastapi_app.api.trades import _execute_trade_internal
@@ -678,12 +704,23 @@ async def handle_ws_message(websocket: WebSocket, user_id: int, account_id: int,
             if deriv_symbol not in app.state.deriv_subscriptions:
                 await app.state.deriv_client.subscribe_ticks(deriv_symbol)
                 app.state.deriv_subscriptions.add(deriv_symbol)
-            await app.state.deriv_client.subscribe_candles(deriv_symbol, interval)
+            candle_key = f"{deriv_symbol}:{interval}"
+            if candle_key not in app.state.deriv_candle_subscriptions:
+                await app.state.deriv_client.subscribe_candles(deriv_symbol, interval)
+                app.state.deriv_candle_subscriptions.add(candle_key)
         
     elif event_type == "unsubscribe":
         symbol = data.get("symbol")
         log_info(f"Unsubscribe from {symbol}", user_id=user_id)
         connection_id = f"{user_id}_{account_id}"
+        bot_state = app.state.bot_instances.get(connection_id)
+        if bot_state and bot_state.get("enabled") and bot_state.get("symbol") == symbol:
+            log_info(
+                "Ignored unsubscribe for active bot symbol",
+                connection_id=connection_id,
+                symbol=symbol,
+            )
+            return
         if connection_id in app.state.ws_subscriptions:
             app.state.ws_subscriptions[connection_id].pop(symbol, None)
 
@@ -746,7 +783,10 @@ async def handle_ws_message(websocket: WebSocket, user_id: int, account_id: int,
             if symbol not in app.state.deriv_subscriptions:
                 await app.state.deriv_client.subscribe_ticks(symbol)
                 app.state.deriv_subscriptions.add(symbol)
-            await app.state.deriv_client.subscribe_candles(symbol, interval)
+            candle_key = f"{symbol}:{interval}"
+            if candle_key not in app.state.deriv_candle_subscriptions:
+                await app.state.deriv_client.subscribe_candles(symbol, interval)
+                app.state.deriv_candle_subscriptions.add(candle_key)
 
         task = asyncio.create_task(_bot_loop(websocket, user_id, account_id, connection_id))
         bot_state["task"] = task
