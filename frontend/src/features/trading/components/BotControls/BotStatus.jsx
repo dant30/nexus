@@ -16,7 +16,7 @@ export function BotStatus() {
       </div>
       {lastEvent && (
         <p className="mt-2 text-xs text-white/50">
-          {lastEvent.message} • {new Date(lastEvent.timestamp).toLocaleTimeString()}
+          {lastEvent.message} - {new Date(lastEvent.timestamp).toLocaleTimeString()}
         </p>
       )}
     </Card>

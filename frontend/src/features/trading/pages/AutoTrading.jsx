@@ -43,22 +43,31 @@ const mapContractToDirection = (tradeType, contract) => {
   return contract === "CALL" ? "RISE" : "FALL";
 };
 
-const extractDirectionFromSignal = (signal, strategy) => {
-  if (!signal) return null;
+const extractSignalDecision = (signal, strategy) => {
+  if (!signal) return { direction: null, confidence: 0 };
 
   const strategyKey = STRATEGY_SIGNAL_KEYS[strategy];
   const strategySignal = (signal.strategies || []).find((entry) => entry.strategy === strategyKey);
   const strategyDirection = strategySignal?.signal;
   if (strategyDirection === "RISE" || strategyDirection === "FALL") {
-    return strategyDirection;
+    return {
+      direction: strategyDirection,
+      confidence: toNumber(strategySignal?.confidence, 0),
+    };
   }
 
   const consensusDirection = signal?.consensus?.decision || signal?.direction;
   if (consensusDirection === "RISE" || consensusDirection === "FALL") {
-    return consensusDirection;
+    return {
+      direction: consensusDirection,
+      confidence: toNumber(signal?.consensus?.confidence ?? signal?.confidence, 0),
+    };
   }
 
-  return null;
+  return {
+    direction: null,
+    confidence: toNumber(signal?.consensus?.confidence ?? signal?.confidence, 0),
+  };
 };
 
 export function AutoTrading() {
@@ -76,6 +85,11 @@ export function AutoTrading() {
   const [durationValue, setDurationValue] = useState(1);
   const [durationUnit, setDurationUnit] = useState("ticks");
   const [dailyLossUsed, setDailyLossUsed] = useState(0);
+  const [cooldownSeconds, setCooldownSeconds] = useState(10);
+  const [maxTradesPerSession, setMaxTradesPerSession] = useState(5);
+  const [minConfidence, setMinConfidence] = useState(TRADING.MIN_SIGNAL_CONFIDENCE);
+  const [sessionTrades, setSessionTrades] = useState(0);
+  const [cooldownUntil, setCooldownUntil] = useState(0);
 
   const { signals } = useSignals();
   const { execute, loading, error } = useTrading();
@@ -99,6 +113,14 @@ export function AutoTrading() {
     }
   };
 
+  const normalizedCooldownSeconds = Math.max(0, Math.floor(toNumber(cooldownSeconds, 0)));
+  const normalizedMaxTradesPerSession = Math.max(1, Math.floor(toNumber(maxTradesPerSession, 1)));
+  const normalizedMinConfidence = Math.min(1, Math.max(0, toNumber(minConfidence, TRADING.MIN_SIGNAL_CONFIDENCE)));
+  const cooldownRemainingSeconds = Math.max(
+    0,
+    Math.ceil((toNumber(cooldownUntil, 0) - Date.now()) / 1000)
+  );
+
   const canRun = !!activeAccount?.id && toNumber(stake, 0) >= TRADING.MIN_STAKE;
 
   const toggleBot = async () => {
@@ -116,9 +138,16 @@ export function AutoTrading() {
       return;
     }
 
+    setSessionTrades(0);
+    setCooldownUntil(0);
+    setDailyLossUsed(0);
+    lastTradeKeyRef.current = null;
+
     setRunning(true);
     setLastEvent({
-      message: `Bot started on ${market} (${tradeType} ${contract})`,
+      message: `Bot started on ${market} (${tradeType} ${contract}) with ${Math.round(
+        normalizedMinConfidence * 100
+      )}% min confidence.`,
       timestamp: Date.now(),
     });
   };
@@ -129,6 +158,25 @@ export function AutoTrading() {
     const timer = setInterval(async () => {
       if (inFlightRef.current) return;
       if (!canRun) return;
+
+      if (sessionTrades >= normalizedMaxTradesPerSession) {
+        setRunning(false);
+        setLastEvent({
+          message: "Max trades per session reached. Bot stopped.",
+          timestamp: Date.now(),
+        });
+        return;
+      }
+
+      const cooldownMs = normalizedCooldownSeconds * 1000;
+      if (cooldownMs > 0 && Date.now() < cooldownUntil) {
+        const remainingSeconds = Math.max(0, Math.ceil((cooldownUntil - Date.now()) / 1000));
+        setLastEvent({
+          message: `Cooldown active (${remainingSeconds}s remaining).`,
+          timestamp: Date.now(),
+        });
+        return;
+      }
 
       if ((openTrades || []).length > 0) {
         setLastEvent({
@@ -148,10 +196,23 @@ export function AutoTrading() {
         return;
       }
 
-      const signalDirection = extractDirectionFromSignal(activeSignal, strategy);
+      const { direction: signalDirection, confidence: signalConfidence } = extractSignalDecision(
+        activeSignal,
+        strategy
+      );
       if (!signalDirection) {
         setLastEvent({
           message: "No actionable signal yet.",
+          timestamp: Date.now(),
+        });
+        return;
+      }
+
+      if (signalConfidence < normalizedMinConfidence) {
+        setLastEvent({
+          message: `Signal confidence ${(signalConfidence * 100).toFixed(
+            0
+          )}% below minimum ${Math.round(normalizedMinConfidence * 100)}%.`,
           timestamp: Date.now(),
         });
         return;
@@ -187,12 +248,20 @@ export function AutoTrading() {
         const result = await execute(payload);
         if (result?.ok) {
           lastTradeKeyRef.current = tradeKey;
+          setSessionTrades((prev) => prev + 1);
+          if (cooldownMs > 0) {
+            setCooldownUntil(Date.now() + cooldownMs);
+          } else {
+            setCooldownUntil(0);
+          }
           const profit = toNumber(result?.data?.profit, 0);
           if (profit < 0) {
             setDailyLossUsed((prev) => prev + Math.abs(profit));
           }
           setLastEvent({
-            message: `Auto trade placed (${tradeType} ${contract}) on ${market}.`,
+            message: `Auto trade placed (${tradeType} ${contract}) on ${market} at ${(signalConfidence * 100).toFixed(
+              0
+            )}% confidence.`,
             timestamp: Date.now(),
           });
         } else {
@@ -211,6 +280,11 @@ export function AutoTrading() {
     running,
     canRun,
     openTrades,
+    sessionTrades,
+    normalizedMaxTradesPerSession,
+    normalizedCooldownSeconds,
+    cooldownUntil,
+    normalizedMinConfidence,
     dailyLossUsed,
     dailyLimit,
     activeSignal,
@@ -274,9 +348,59 @@ export function AutoTrading() {
           </div>
           <StakeSettings value={stake} onChange={setStake} />
           <RiskLimits value={dailyLimit} onChange={setDailyLimit} />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-white/70">
+                Cooldown (seconds)
+              </label>
+              <Input
+                type="number"
+                min="0"
+                step="1"
+                value={cooldownSeconds}
+                onChange={(event) => setCooldownSeconds(event.target.value)}
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-white/70">
+                Max Trades / Session
+              </label>
+              <Input
+                type="number"
+                min="1"
+                step="1"
+                value={maxTradesPerSession}
+                onChange={(event) => setMaxTradesPerSession(event.target.value)}
+              />
+            </div>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-white/70">
+              Min Signal Confidence ({Math.round(normalizedMinConfidence * 100)}%)
+            </label>
+            <Input
+              type="range"
+              min="0.5"
+              max="1"
+              step="0.01"
+              value={normalizedMinConfidence}
+              onChange={(event) => setMinConfidence(event.target.value)}
+            />
+          </div>
 
           <div className="text-xs text-white/60">
             <p>Selected signal: {activeSignal?.direction || "N/A"}</p>
+            <p>
+              Signal confidence:{" "}
+              {Math.round(
+                toNumber(activeSignal?.consensus?.confidence ?? activeSignal?.confidence, 0) * 100
+              )}
+              %
+            </p>
+            <p>
+              Session trades: {sessionTrades} / {normalizedMaxTradesPerSession}
+            </p>
+            <p>Cooldown remaining: {cooldownRemainingSeconds}s</p>
             <p>Loss used: {dailyLossUsed.toFixed(2)} / {toNumber(dailyLimit, 0).toFixed(2)}</p>
           </div>
 
