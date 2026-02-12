@@ -106,8 +106,13 @@ class WebSocketManager {
    * Send message
    */
   send(type, data = {}) {
+    // Debug log outgoing message to help trace missing messages
+    try {
+      console.debug("[WebSocket] Outgoing message:", { type, data });
+    } catch (e) {}
+
     if (!this.isConnected()) {
-      console.warn("[WebSocket] Not connected, cannot send message");
+      console.warn("[WebSocket] Not connected, cannot send message (queued will be resent on reconnect)");
       return false;
     }
 
@@ -119,6 +124,7 @@ class WebSocketManager {
           ...data,
         })
       );
+      console.debug("[WebSocket] Sent:", type);
       return true;
     } catch (error) {
       console.error("[WebSocket] Failed to send message:", error);

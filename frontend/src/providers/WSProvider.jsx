@@ -101,6 +101,17 @@ export function WSProvider({ children }) {
   }, []);
 
   const sendMessage = useCallback((type, data) => {
+    // Ensure connection is established before sending to avoid silent drops
+    if (!wsUrlRef.current) {
+      return false;
+    }
+    if (!wsManager.isConnected()) {
+      // Try to reconnect synchronously (best-effort)
+      try {
+        // connect expects URL
+        wsManager.connect(wsUrlRef.current).catch(() => {});
+      } catch (e) {}
+    }
     return wsManager.send(type, data);
   }, []);
 

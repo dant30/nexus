@@ -438,6 +438,13 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, account_id: int
 async def handle_ws_message(websocket: WebSocket, user_id: int, account_id: int, data: dict):
     """Handle incoming WebSocket messages."""
     event_type = data.get("type")
+
+    
+    # Raw payload debug to trace missing/incorrect messages from clients
+    try:
+        log_info("Raw WS payload received", raw=data, event_type=event_type, user_id=user_id, account_id=account_id)
+    except Exception:
+        pass
     
     log_info(
         "WS message received",
