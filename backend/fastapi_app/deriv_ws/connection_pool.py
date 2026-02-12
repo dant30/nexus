@@ -2,10 +2,13 @@
 Connection pool for managing Deriv WebSocket connections.
 """
 
-from typing import Dict, Optional
+from typing import TYPE_CHECKING, Optional
 import asyncio
 
-from .client import DerivWebSocketClient
+# Only import the client class for type checking to avoid circular import at runtime
+if TYPE_CHECKING:
+    from .client import DerivWebSocketClient  # pragma: no cover
+
 from fastapi_app.config import settings
 from shared.utils.logger import log_info, log_error, get_logger
 
@@ -20,46 +23,53 @@ class ConnectionPool:
     
     def __init__(self):
         """Initialize connection pool."""
-        self.connections: Dict[str, DerivWebSocketClient] = {}
+        self._clients = {}
     
     async def get_or_create(
         self,
         user_id: int,
         api_token: str,
-    ) -> Optional[DerivWebSocketClient]:
+    ) -> Optional["DerivWebSocketClient"]:
         """
         Get existing connection or create new one.
-        
+
         Args:
         - user_id: User ID (for connection key)
         - api_token: Deriv API token
-        
+
         Returns:
         - DerivWebSocketClient or None if failed
         """
         key = f"user_{user_id}"
-        
+
         # Check if connection exists and is alive
-        if key in self.connections:
-            client = self.connections[key]
-            if client.status.value in ["connected", "authorized"]:
+        if key in self._clients:
+            client = self._clients[key]
+            if getattr(client, "status", None) and client.status.value in ["connected", "authorized"]:
                 return client
             else:
                 # Remove dead connection
-                del self.connections[key]
-        
+                del self._clients[key]
+
+        # Local import to avoid circular import at module import time
+        try:
+            from .client import DerivWebSocketClient
+        except Exception as e:
+            log_error("Failed to import DerivWebSocketClient", exception=e)
+            return None
+
         # Create new connection
         try:
             client = DerivWebSocketClient(settings.DERIV_APP_ID, api_token)
-            
+
             if await client.connect():
-                self.connections[key] = client
+                self._clients[key] = client
                 log_info(f"Created new connection for user {user_id}")
                 return client
             else:
-                log_error(f"Failed to create connection for user {user_id}")
+                log_error(f"Failed to connect new client for user {user_id}")
                 return None
-        
+
         except Exception as e:
             log_error(f"Connection creation error for user {user_id}", exception=e)
             return None
@@ -67,22 +77,22 @@ class ConnectionPool:
     async def close(self, user_id: int):
         """
         Close connection for a user.
-        
+
         Args:
         - user_id: User ID
         """
         key = f"user_{user_id}"
         
-        if key in self.connections:
-            client = self.connections[key]
+        if key in self._clients:
+            client = self._clients[key]
             await client.disconnect()
-            del self.connections[key]
+            del self._clients[key]
     
     async def close_all(self):
         """Close all connections."""
-        for client in self.connections.values():
+        for client in self._clients.values():
             await client.disconnect()
-        self.connections.clear()
+        self._clients.clear()
 
 
 # Global connection pool
