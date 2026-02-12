@@ -6,6 +6,7 @@ import asyncio
 import time
 from contextlib import asynccontextmanager
 from decimal import Decimal
+from datetime import datetime, timedelta
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -437,20 +438,34 @@ async def _maybe_execute_bot_trade(
         )
         return
 
+    # ===== NEW: Auto-fail trades older than 2 minutes =====
     has_open_trade = await sync_to_async(
         lambda: Trade.objects.filter(
             user_id=user_id,
             account_id=account_id,
             status=Trade.STATUS_OPEN,
-        ).exists()
+        ).first()
     )()
+    
     if has_open_trade:
-        log_info(
-            "Bot skipped trade: open trade exists",
-            connection_id=connection_id,
-            account_id=account_id,
-        )
-        return
+        trade_age_seconds = (datetime.utcnow() - has_open_trade.created_at).total_seconds()
+        if trade_age_seconds > 120:  # 2 minutes
+            log_info(
+                "Auto-failing old open trade",
+                connection_id=connection_id,
+                trade_id=has_open_trade.id,
+                age_seconds=trade_age_seconds,
+            )
+            has_open_trade.status = Trade.STATUS_FAILED
+            await sync_to_async(has_open_trade.save)()
+        else:
+            log_info(
+                "Bot skipped trade: open trade exists",
+                connection_id=connection_id,
+                account_id=account_id,
+                trade_age_seconds=trade_age_seconds,
+            )
+            return
 
     decision, confidence = _extract_signal_decision(signal, bot_state.get("strategy"))
     if decision not in {"RISE", "FALL"}:
@@ -528,23 +543,32 @@ async def _maybe_execute_bot_trade(
         trade_type=execution_trade_type,
     )
 
-    bot_state["last_trade_key"] = trade_key
-    bot_state["session_trades"] = int(bot_state.get("session_trades", 0)) + 1
-    bot_state["cooldown_until"] = now + int(bot_state.get("cooldown_seconds", 0))
-    app.state.bot_instances[connection_id] = bot_state
+    # Only update bot state if trade was successfully created
+    if trade and trade.status != Trade.STATUS_FAILED:
+        bot_state["last_trade_key"] = trade_key
+        bot_state["session_trades"] = int(bot_state.get("session_trades", 0)) + 1
+        bot_state["cooldown_until"] = now + int(bot_state.get("cooldown_seconds", 0))
+        app.state.bot_instances[connection_id] = bot_state
 
-    await _send_bot_status(
-        connection_id,
-        {
-            "state": "running",
-            "reason": f"Auto trade executed: {decision}",
-            "trade_id": trade.id,
-            "session_trades": bot_state.get("session_trades"),
-            "cooldown_until": bot_state.get("cooldown_until"),
-            "confidence": confidence,
-            "symbol": bot_state.get("symbol"),
-        },
-    )
+        await _send_bot_status(
+            connection_id,
+            {
+                "state": "running",
+                "reason": f"Auto trade executed: {decision}",
+                "trade_id": trade.id,
+                "session_trades": bot_state.get("session_trades"),
+                "cooldown_until": bot_state.get("cooldown_until"),
+                "confidence": confidence,
+                "symbol": bot_state.get("symbol"),
+            },
+        )
+    else:
+        log_error(
+            "Trade execution failed; bot state not updated",
+            connection_id=connection_id,
+            trade_id=trade.id if trade else None,
+            status=trade.status if trade else "NO_TRADE",
+        )
 
 
 async def _bot_loop(websocket: WebSocket, user_id: int, account_id: int, connection_id: str):

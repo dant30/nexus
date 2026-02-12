@@ -213,14 +213,14 @@ async def _execute_trade_internal(
 ):
     """
     Internal trade execution:
-    1. create DB trade (OPEN)
-    2. request proposal from Deriv (if deriv_client available)
-    3. buy contract if proposal acceptable
-    4. update trade with proposal_id / transaction_id
-    5. broadcast WS trade_status to connected clients
+    1. Request proposal from Deriv
+    2. Buy contract if proposal acceptable
+    3. Create DB trade record AFTER Deriv confirms buy (NEW)
+    4. Update trade with proposal_id / transaction_id
+    5. Broadcast WS trade_status to connected clients
     """
     from django_core.trades.services import create_trade
-    # create local trade record (does not block execution)
+    
     log_info(
         "Executing trade internally",
         account_id=getattr(account, "id", None),
@@ -229,6 +229,130 @@ async def _execute_trade_internal(
         stake=str(stake),
         duration_seconds=duration_seconds,
     )
+
+    # If no deriv client configured, create failed trade record
+    deriv_client = getattr(app.state, "deriv_client", None)
+    if not deriv_client:
+        log_error("Deriv client not available - cannot execute trade")
+        trade = await sync_to_async(create_trade)(
+            user=user,
+            contract_type=contract_type or ("CALL" if direction == "RISE" else "PUT"),
+            direction=direction,
+            stake=Decimal(stake),
+            account=account,
+            duration_seconds=duration_seconds,
+            proposal_id=None,
+            trade_type=trade_type or ("RISE_FALL" if direction in ("RISE", "FALL") else "CALL_PUT"),
+            contract=contract or ("CALL" if direction == "RISE" else "PUT"),
+        )
+        trade.status = Trade.STATUS_FAILED
+        await sync_to_async(trade.save)()
+        return trade
+
+    # Request proposal with a req_id for correlation
+    req_id = generate_proposal_id()
+    proposal = None
+    
+    try:
+        log_info(
+            "Sending Deriv proposal request",
+            symbol=symbol,
+            contract_type=contract_type or ("CALL" if direction == "RISE" else "PUT"),
+            req_id=req_id,
+        )
+        await deriv_client.request_proposal(
+            symbol=symbol,
+            contract_type=contract_type or ("CALL" if direction == "RISE" else "PUT"),
+            amount=Decimal(stake),
+            duration=duration_seconds,
+            duration_unit="s",
+            currency=getattr(account, "currency", "USD"),
+            req_id=req_id,
+        )
+        
+        # Wait for proposal event with retry
+        proposal = await deriv_client.wait_for_event(
+            "proposal",
+            lambda ev: ev.get("id") == req_id or ev.get("req_id") == req_id,
+            timeout=5
+        )
+    except Exception as exc:
+        log_error("Proposal request failed", exception=exc, req_id=req_id)
+        proposal = None
+
+    if not proposal:
+        log_error("No proposal received from Deriv", req_id=req_id)
+        trade = await sync_to_async(create_trade)(
+            user=user,
+            contract_type=contract_type or ("CALL" if direction == "RISE" else "PUT"),
+            direction=direction,
+            stake=Decimal(stake),
+            account=account,
+            duration_seconds=duration_seconds,
+            proposal_id=None,
+            trade_type=trade_type or ("RISE_FALL" if direction in ("RISE", "FALL") else "CALL_PUT"),
+            contract=contract or ("CALL" if direction == "RISE" else "PUT"),
+        )
+        trade.status = Trade.STATUS_FAILED
+        await sync_to_async(trade.save)()
+        return trade
+
+    # ===== NEW: Only create trade after BUY is confirmed =====
+    transaction_id = None
+    buy_ok = False
+    
+    try:
+        proposal_id = proposal.get("id") or proposal.get("proposal_id")
+        ask_price = proposal.get("ask_price") or proposal.get("ask")
+        
+        log_info(
+            "Sending Deriv buy request",
+            proposal_id=proposal_id,
+            ask_price=ask_price,
+            req_id=req_id,
+        )
+        
+        await deriv_client.buy_contract(proposal_id, float(ask_price), req_id=req_id)
+        
+        # Wait for buy confirmation
+        buy_evt = await deriv_client.wait_for_event(
+            "buy",
+            lambda ev: ev.get("proposal_id") == proposal_id or ev.get("req_id") == req_id,
+            timeout=5
+        )
+        
+        if buy_evt:
+            transaction_id = buy_evt.get("transaction_id") or buy_evt.get("buy_id") or buy_evt.get("id")
+            buy_ok = True
+            log_info(
+                "Buy confirmed by Deriv",
+                transaction_id=transaction_id,
+                proposal_id=proposal_id,
+            )
+        else:
+            log_error("No buy confirmation received", proposal_id=proposal_id)
+            
+    except Exception as exc:
+        log_error("Buy request failed", exception=exc, proposal_id=proposal.get("id"))
+
+    if not buy_ok or not transaction_id:
+        log_error("Trade not executed by Deriv", proposal_id=proposal.get("id"))
+        trade = await sync_to_async(create_trade)(
+            user=user,
+            contract_type=contract_type or ("CALL" if direction == "RISE" else "PUT"),
+            direction=direction,
+            stake=Decimal(stake),
+            account=account,
+            duration_seconds=duration_seconds,
+            proposal_id=str(proposal.get("id") or proposal.get("proposal_id")),
+            trade_type=trade_type or ("RISE_FALL" if direction in ("RISE", "FALL") else "CALL_PUT"),
+            contract=contract or ("CALL" if direction == "RISE" else "PUT"),
+        )
+        trade.status = Trade.STATUS_FAILED
+        await sync_to_async(trade.save)()
+        return trade
+
+    # ===== NOW create trade record (Deriv confirmed buy) =====
     trade = await sync_to_async(create_trade)(
         user=user,
         contract_type=contract_type or ("CALL" if direction == "RISE" else "PUT"),
@@ -236,82 +360,23 @@ async def _execute_trade_internal(
         stake=Decimal(stake),
         account=account,
         duration_seconds=duration_seconds,
-        proposal_id=None,
-        trade_type=trade_type or ( "RISE_FALL" if direction in ("RISE","FALL") else "CALL_PUT"),
-        contract=contract or ( "CALL" if direction == "RISE" else "PUT"),
+        proposal_id=str(proposal.get("id") or proposal.get("proposal_id")),
+        trade_type=trade_type or ("RISE_FALL" if direction in ("RISE", "FALL") else "CALL_PUT"),
+        contract=contract or ("CALL" if direction == "RISE" else "PUT"),
     )
-
-    # If no deriv client configured, return created trade (recorded but not executed)
-    deriv_client = getattr(app.state, "deriv_client", None)
-    if not deriv_client:
-        log_info("Deriv client not available - trade recorded only", trade_id=trade.id)
-        return trade
-
-    # Request proposal with a req_id for correlation
-    req_id = generate_proposal_id()
-    try:
-        log_info(
-            "Sending Deriv proposal request",
-            trade_id=trade.id,
-            symbol=symbol,
-            contract_type=contract_type or ("CALL" if direction == "RISE" else "PUT"),
-            req_id=req_id,
-        )
-        ok = await deriv_client.request_proposal(
-            symbol=symbol,
-            contract_type=contract_type or ( "CALL" if direction == "RISE" else "PUT"),
-            amount=Decimal(stake),
-            duration=duration_seconds,
-            duration_unit="s",  # adapt if your serializer expects different units
-            currency=getattr(account, "currency", "USD"),
-            req_id=req_id,
-        )
-    except Exception as exc:
-        log_error("Proposal request failed", exception=exc, trade_id=trade.id)
-        return trade
-
-    # Wait for proposal event (client may implement wait_for_event)
-    proposal = None
-    try:
-        # wait_for_event should return the processed proposal dict (see DerivSerializer.deserialize_proposal)
-        proposal = await deriv_client.wait_for_event("proposal", lambda ev: ev.get("id") == req_id, timeout=5)
-    except Exception:
-        proposal = None
-
-    if not proposal:
-        log_info("No proposal received; leaving trade as OPEN", trade_id=trade.id)
-        return trade
-
-    # Attempt buy using proposal id and ask_price
-    buy_ok = False
-    transaction_id = None
-    try:
-        proposal_id = proposal.get("id") or proposal.get("proposal_id")
-        ask_price = proposal.get("ask_price") or proposal.get("ask") or proposal.get("ask_price")
-        log_info(
-            "Sending Deriv buy request",
-            trade_id=trade.id,
-            proposal_id=proposal_id,
-            ask_price=ask_price,
-            req_id=req_id,
-        )
-        await deriv_client.buy_contract(proposal_id, float(ask_price), req_id=req_id)
-        # Wait for buy confirmation if client exposes wait_for_event
-        buy_evt = await deriv_client.wait_for_event("buy", lambda ev: ev.get("proposal_id") == proposal_id, timeout=5)
-        if buy_evt:
-            transaction_id = buy_evt.get("transaction_id") or buy_evt.get("buy_id") or buy_evt.get("id")
-            buy_ok = True
-    except Exception as exc:
-        log_error("Buy request failed", exception=exc, trade_id=trade.id)
-
-    # Persist proposal_id / transaction_id on trade
-    if proposal:
-        trade.proposal_id = str(proposal.get("id") or proposal.get("proposal_id"))
-    if transaction_id:
-        trade.transaction_id = str(transaction_id)
+    
+    # Set transaction_id
+    trade.transaction_id = str(transaction_id)
     await sync_to_async(trade.save)()
 
-    # Broadcast trade_status to connected WS clients (simple loop over subscriptions)
+    log_info(
+        "Trade created AFTER Deriv buy confirmation",
+        trade_id=trade.id,
+        transaction_id=transaction_id,
+        proposal_id=trade.proposal_id,
+    )
+
+    # Broadcast trade_status to connected WS clients
     try:
         payload = {
             "type": "trade_status",
@@ -322,14 +387,12 @@ async def _execute_trade_internal(
             "stake": str(trade.stake),
             "payout": str(trade.payout) if trade.payout else None,
         }
-        # broadcast to all WS connections interested in this account
+        
         for connection_id, websocket in list(app.state.ws_connections.items()):
-            # simple check: connection id format "user_account"
             if str(trade.account_id) in connection_id:
                 try:
                     await websocket.send_json(payload)
                 except Exception:
-                    # best-effort broadcast
                     pass
     except Exception:
         log_error("Failed to broadcast trade_status", trade_id=trade.id)

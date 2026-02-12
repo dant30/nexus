@@ -1,6 +1,6 @@
 """
 WebSocket client for Deriv API.
-Handles connection, authentication, and message exchange.
+Handles connection, authentication, and message exchange with retry logic.
 """
 
 import asyncio
@@ -26,12 +26,15 @@ class DerivWebSocketClient:
     - Auto-reconnection with exponential backoff
     - Message queuing during disconnect
     - Event handling
+    - Retry logic for requests
     - Graceful shutdown
     """
     
     DERIV_WS_URL = "wss://ws.derivws.com/websockets/v3"
     RECONNECT_DELAY = 3  # Start with 3 seconds
     MAX_RECONNECT_DELAY = 300  # Cap at 5 minutes
+    MAX_RETRY_ATTEMPTS = 3  # NEW: Retry failed requests
+    RETRY_DELAY = 1  # NEW: Delay between retries (seconds)
     
     def __init__(self, app_id: str, api_token: str):
         """
@@ -74,8 +77,7 @@ class DerivWebSocketClient:
             # Start message loop
             asyncio.create_task(self._message_loop())
 
-            # Authorize only after message loop is running, otherwise
-            # authorize responses cannot be consumed by wait_for_event().
+            # Authorize only after message loop is running
             if not await self.authorize():
                 await self.disconnect()
                 self.status = WebSocketStatus.ERROR
@@ -117,7 +119,7 @@ class DerivWebSocketClient:
     
     async def subscribe_ticks(self, symbol: str) -> bool:
         """
-        Subscribe to tick updates for a symbol.
+        Subscribe to tick updates for a symbol with retry.
         
         Args:
         - symbol: Trading symbol
@@ -125,41 +127,55 @@ class DerivWebSocketClient:
         Returns:
         - True if subscribed, False otherwise
         """
-        try:
-            request = {
-                "ticks": symbol,
-                "subscribe": 1,
-            }
+        for attempt in range(self.MAX_RETRY_ATTEMPTS):
+            try:
+                request = {
+                    "ticks": symbol,
+                    "subscribe": 1,
+                }
+                
+                await self.send(request)
+                log_info(f"Subscribed to ticks: {symbol}")
+                return True
             
-            await self.send(request)
-            log_info(f"Subscribed to ticks: {symbol}")
-            return True
+            except Exception as e:
+                log_error(
+                    f"Failed to subscribe to ticks (attempt {attempt + 1}/{self.MAX_RETRY_ATTEMPTS}): {symbol}",
+                    exception=e
+                )
+                if attempt < self.MAX_RETRY_ATTEMPTS - 1:
+                    await asyncio.sleep(self.RETRY_DELAY)
         
-        except Exception as e:
-            log_error(f"Failed to subscribe to ticks: {symbol}", exception=e)
-            return False
+        return False
 
     async def subscribe_candles(self, symbol: str, granularity: int) -> bool:
         """
-        Subscribe to candle updates for a symbol.
+        Subscribe to candle updates for a symbol with retry.
         """
-        try:
-            request = {
-                "ticks_history": symbol,
-                "style": "candles",
-                "subscribe": 1,
-                "granularity": granularity,
-                "count": 60,
-                "end": "latest",
-            }
+        for attempt in range(self.MAX_RETRY_ATTEMPTS):
+            try:
+                request = {
+                    "ticks_history": symbol,
+                    "style": "candles",
+                    "subscribe": 1,
+                    "granularity": granularity,
+                    "count": 60,
+                    "end": "latest",
+                }
 
-            await self.send(request)
-            log_info(f"Subscribed to candles: {symbol} @ {granularity}s")
-            return True
+                await self.send(request)
+                log_info(f"Subscribed to candles: {symbol} @ {granularity}s")
+                return True
 
-        except Exception as e:
-            log_error(f"Failed to subscribe to candles: {symbol}", exception=e)
-            return False
+            except Exception as e:
+                log_error(
+                    f"Failed to subscribe to candles (attempt {attempt + 1}/{self.MAX_RETRY_ATTEMPTS}): {symbol}",
+                    exception=e
+                )
+                if attempt < self.MAX_RETRY_ATTEMPTS - 1:
+                    await asyncio.sleep(self.RETRY_DELAY)
+        
+        return False
     
     async def send(self, data: Dict[str, Any]) -> bool:
         """
@@ -191,6 +207,7 @@ class DerivWebSocketClient:
             return False
 
     async def _flush_queue(self):
+        """Flush queued messages."""
         if not self.message_queue:
             return
         queued = list(self.message_queue)
@@ -291,32 +308,86 @@ class DerivWebSocketClient:
         currency: str,
         req_id: Optional[str] = None,
     ) -> bool:
-        """Request a contract proposal."""
-        payload = DerivSerializer.serialize_proposal(
-            symbol=symbol,
-            contract_type=contract_type,
-            amount=amount,
-            duration=duration,
-            duration_unit=duration_unit,
-            currency=currency,
-            req_id=req_id,
-        )
-        return await self.send(payload)
+        """Request a contract proposal with retry."""
+        for attempt in range(self.MAX_RETRY_ATTEMPTS):
+            try:
+                payload = DerivSerializer.serialize_proposal(
+                    symbol=symbol,
+                    contract_type=contract_type,
+                    amount=amount,
+                    duration=duration,
+                    duration_unit=duration_unit,
+                    currency=currency,
+                    req_id=req_id,
+                )
+                success = await self.send(payload)
+                if success:
+                    return True
+                
+                log_info(f"Proposal request attempt {attempt + 1}/{self.MAX_RETRY_ATTEMPTS}")
+                if attempt < self.MAX_RETRY_ATTEMPTS - 1:
+                    await asyncio.sleep(self.RETRY_DELAY)
+            
+            except Exception as e:
+                log_error(
+                    f"Proposal request failed (attempt {attempt + 1}/{self.MAX_RETRY_ATTEMPTS})",
+                    exception=e
+                )
+                if attempt < self.MAX_RETRY_ATTEMPTS - 1:
+                    await asyncio.sleep(self.RETRY_DELAY)
+        
+        return False
 
     async def buy_contract(self, proposal_id: str, price, req_id: Optional[str] = None) -> bool:
-        """Buy a contract from a proposal."""
-        payload = DerivSerializer.serialize_buy_contract(proposal_id, price)
-        if req_id is not None:
-            payload["req_id"] = req_id
-        return await self.send(payload)
+        """Buy a contract from a proposal with retry."""
+        for attempt in range(self.MAX_RETRY_ATTEMPTS):
+            try:
+                payload = DerivSerializer.serialize_buy_contract(proposal_id, price)
+                if req_id is not None:
+                    payload["req_id"] = req_id
+                success = await self.send(payload)
+                if success:
+                    return True
+                
+                log_info(f"Buy contract attempt {attempt + 1}/{self.MAX_RETRY_ATTEMPTS}")
+                if attempt < self.MAX_RETRY_ATTEMPTS - 1:
+                    await asyncio.sleep(self.RETRY_DELAY)
+            
+            except Exception as e:
+                log_error(
+                    f"Buy contract failed (attempt {attempt + 1}/{self.MAX_RETRY_ATTEMPTS})",
+                    exception=e
+                )
+                if attempt < self.MAX_RETRY_ATTEMPTS - 1:
+                    await asyncio.sleep(self.RETRY_DELAY)
+        
+        return False
 
     async def subscribe_open_contract(self, contract_id: int, req_id: Optional[str] = None) -> bool:
-        """Subscribe to open contract updates."""
-        payload = DerivSerializer.serialize_subscribe_open_contract(
-            contract_id=contract_id,
-            req_id=req_id,
-        )
-        return await self.send(payload)
+        """Subscribe to open contract updates with retry."""
+        for attempt in range(self.MAX_RETRY_ATTEMPTS):
+            try:
+                payload = DerivSerializer.serialize_subscribe_open_contract(
+                    contract_id=contract_id,
+                    req_id=req_id,
+                )
+                success = await self.send(payload)
+                if success:
+                    return True
+                
+                log_info(f"Subscribe open contract attempt {attempt + 1}/{self.MAX_RETRY_ATTEMPTS}")
+                if attempt < self.MAX_RETRY_ATTEMPTS - 1:
+                    await asyncio.sleep(self.RETRY_DELAY)
+            
+            except Exception as e:
+                log_error(
+                    f"Subscribe open contract failed (attempt {attempt + 1}/{self.MAX_RETRY_ATTEMPTS})",
+                    exception=e
+                )
+                if attempt < self.MAX_RETRY_ATTEMPTS - 1:
+                    await asyncio.sleep(self.RETRY_DELAY)
+        
+        return False
 
     async def wait_for_event(
         self,
@@ -329,12 +400,14 @@ class DerivWebSocketClient:
         while True:
             remaining = end_time - asyncio.get_event_loop().time()
             if remaining <= 0:
+                log_info(f"Timeout waiting for event: {event_type}")
                 return None
             try:
                 event = await asyncio.wait_for(self.event_queue.get(), timeout=remaining)
             except asyncio.TimeoutError:
                 return None
             if event.get("event") == "error":
+                log_error("Deriv error event received", event=event)
                 return event
             if event.get("event") != event_type:
                 continue
