@@ -13,6 +13,7 @@ from asgiref.sync import sync_to_async
 
 from shared.database.django import setup_django
 from shared.utils.logger import log_info, log_error
+from fastapi.exceptions import RequestValidationError
 
 # Initialize Django ORM FIRST
 setup_django()
@@ -205,6 +206,34 @@ async def general_exception_handler(request: Request, exc: Exception):
                 "code": "INTERNAL_SERVER_ERROR",
                 "message": "An unexpected error occurred",
             },
+        },
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Log and return detailed validation errors for requests."""
+    try:
+        body_bytes = await request.body()
+        body_text = body_bytes.decode("utf-8", errors="ignore")
+    except Exception:
+        body_text = "<unable to read body>"
+
+    log_error(
+        "Request validation error",
+        path=request.url.path,
+        method=request.method,
+        detail=exc.errors(),
+        body=body_text,
+    )
+
+    return JSONResponse(
+        status_code=422,
+        content={
+            "success": False,
+            "error": {"code": "VALIDATION_ERROR", "message": "Request validation failed"},
+            "detail": exc.errors(),
+            "body": body_text,
         },
     )
 
