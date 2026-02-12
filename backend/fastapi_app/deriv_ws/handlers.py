@@ -3,6 +3,7 @@ Event handlers for Deriv WebSocket messages.
 """
 from typing import Dict, Any, Callable, Optional
 import json
+from fastapi_app.deriv_ws.connection_pool import pool as connection_pool
 
 from .events import DerivEventType
 from .serializers import DerivSerializer
