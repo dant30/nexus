@@ -259,41 +259,43 @@ export function AutoTrading() {
 
       inFlightRef.current = true;
       try {
-        const payload = {
-          symbol: market,
-          trade_type: tradeType,
-          contract,
-          stake: toNumber(stake, TRADING.DEFAULT_STAKE),
-          duration_seconds: resolveDurationSeconds(durationValue, durationUnit),
-          duration_unit: durationUnit,
-          account_id: activeAccount?.id,
-        };
+        const durationSeconds = resolveDurationSeconds(durationValue, durationUnit);
 
-        const result = await execute(payload);
-        if (result?.ok) {
+        const result = await execute({
+          symbol: market,
+          contract_type: contract,
+          direction: configuredDirection,
+          stake: Number(stake),
+          duration_seconds: durationSeconds,
+          account_id: activeAccount.id,
+        });
+
+        if (result?.success) {
           lastTradeKeyRef.current = tradeKey;
           setSessionTrades((prev) => prev + 1);
-          if (cooldownMs > 0) {
-            setCooldownUntil(Date.now() + cooldownMs);
-          } else {
-            setCooldownUntil(0);
-          }
-          const profit = toNumber(result?.data?.profit, 0);
-          if (profit < 0) {
-            setDailyLossUsed((prev) => prev + Math.abs(profit));
-          }
           setLastEvent({
-            message: `Auto trade placed (${tradeType} ${contract}) on ${market} at ${(signalConfidence * 100).toFixed(
-              0
-            )}% confidence.`,
+            message: `Trade executed: ${contract} ${market} - Stake $${stake}`,
             timestamp: Date.now(),
           });
+
+          if (result.profit && result.profit < 0) {
+            setDailyLossUsed((prev) => prev + Math.abs(result.profit));
+          }
+
+          if (normalizedCooldownSeconds > 0) {
+            setCooldownUntil(Date.now() + normalizedCooldownSeconds * 1000);
+          }
         } else {
           setLastEvent({
-            message: result?.error || "Auto trade failed.",
+            message: `Trade failed: ${result?.error || "Unknown error"}`,
             timestamp: Date.now(),
           });
         }
+      } catch (err) {
+        setLastEvent({
+          message: `Trade error: ${err?.message || "Unknown error"}`,
+          timestamp: Date.now(),
+        });
       } finally {
         inFlightRef.current = false;
       }
@@ -421,8 +423,7 @@ export function AutoTrading() {
               Signal confidence:{" "}
               {Math.round(
                 toNumber(activeSignal?.consensus?.confidence ?? activeSignal?.confidence, 0) * 100
-              )}
-              %
+              )}%
             </p>
             <p>
               Session trades: {sessionTrades} / {normalizedMaxTradesPerSession}

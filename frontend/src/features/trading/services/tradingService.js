@@ -6,17 +6,27 @@ const client = axios.create();
 attachInterceptors(client);
 
 export const executeTrade = async (payload) => {
-  const { data } = await client.post(API_ENDPOINTS.TRADES.EXECUTE, payload);
-  return data;
+  try {
+    const { data } = await client.post(API_ENDPOINTS.TRADES.EXECUTE, {
+      contract_type: payload.contract_type,
+      direction: payload.direction,
+      stake: String(payload.stake),
+      duration_seconds: payload.duration_seconds || 300,
+      account_id: payload.account_id,
+      symbol: payload.symbol,
+    });
+    return data;
+  } catch (error) {
+    console.error("Trade execution error:", error);
+    throw error;
+  }
 };
 
-export const closeTrade = async (id, payload) => {
-  const { data } = await client.post(API_ENDPOINTS.TRADES.CLOSE(id), payload);
-  return data;
-};
-
-export const listTrades = async (params = {}) => {
-  const { data } = await client.get(API_ENDPOINTS.TRADES.LIST, { params });
+export const listTrades = async (options = {}) => {
+  const { limit = 50 } = options;
+  const { data } = await client.get(API_ENDPOINTS.TRADES.LIST, {
+    params: { limit },
+  });
   return data;
 };
 
@@ -25,12 +35,17 @@ export const listOpenTrades = async () => {
   return data;
 };
 
-export const getTrade = async (id) => {
-  const { data } = await client.get(API_ENDPOINTS.TRADES.GET(id));
+export const getTrade = async (tradeId) => {
+  const { data } = await client.get(API_ENDPOINTS.TRADES.GET(tradeId));
   return data;
 };
 
-export const getTradeProfit = async (id) => {
-  const { data } = await client.get(API_ENDPOINTS.TRADES.PROFIT(id));
+export const closeTrade = async (tradeId) => {
+  const { data } = await client.post(API_ENDPOINTS.TRADES.CLOSE(tradeId));
+  return data;
+};
+
+export const getStats = async () => {
+  const { data } = await client.get(API_ENDPOINTS.TRADES.STATS);
   return data;
 };

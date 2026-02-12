@@ -20,87 +20,69 @@ const normalizeError = (error) => {
     if (lower.includes("not open")) return detail;
     return detail;
   }
-
-  if (code === "VALIDATION_ERROR") return detail || "Validation error.";
-  if (code === "UNAUTHORIZED") return "Session expired. Please log in again.";
-  if (code === "NOT_FOUND") return detail || "Resource not found.";
-  if (code === "INTERNAL_SERVER_ERROR") return "Server error. Please try again.";
-
-  return detail || error?.message || "Unable to execute trade.";
+  return detail || "Trade execution failed.";
 };
 
 export const useTrading = () => {
   const { activeAccount } = useAccountContext();
-  const { refresh } = useTradingContext() || {};
+  const { setTrades, setOpenTrades } = useTradingContext();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [lastTrade, setLastTrade] = useState(null);
 
   const execute = useCallback(
     async (payload) => {
+      if (!activeAccount?.id) {
+        setError("No active account selected.");
+        return { success: false, error: "No active account" };
+      }
+
       setLoading(true);
       setError(null);
+
       try {
-        const selectedTradeType = payload?.trade_type ?? payload?.tradeType;
-        const selectedContract = payload?.contract;
-
-        if (selectedTradeType) {
-          const allowedTradeTypes = new Set(TRADING.TRADE_TYPES.map((type) => type.value));
-          if (!allowedTradeTypes.has(selectedTradeType)) {
-            throw new Error("Invalid trade type.");
-          }
-
-          const allowedContracts =
-            TRADING.TRADE_TYPE_CONTRACTS[selectedTradeType]?.map((option) => option.value) || [];
-          if (!allowedContracts.includes(selectedContract)) {
-            throw new Error(
-              selectedTradeType === "RISE_FALL"
-                ? "For Rise/Fall, contract must be Rise or Fall."
-                : "For Call/Put, contract must be Call or Put."
-            );
-          }
+        // Validate payload
+        if (!payload.stake || payload.stake < TRADING.MIN_STAKE) {
+          const err = `Minimum stake: $${TRADING.MIN_STAKE}`;
+          setError(err);
+          return { success: false, error: err };
         }
 
-        const normalizedPayload = {
-          duration_seconds: 300,
+        if (!payload.contract_type || !payload.direction) {
+          const err = "Invalid contract type or direction.";
+          setError(err);
+          return { success: false, error: err };
+        }
+
+        // Execute trade
+        const result = await executeTrade({
           ...payload,
-          ...(selectedTradeType
-            ? {
-                trade_type: selectedTradeType,
-                contract: selectedContract,
-              }
-            : {}),
-          stake: payload?.stake ?? TRADING.DEFAULT_STAKE,
-          account_id: payload?.account_id ?? activeAccount?.id,
-        };
+          account_id: activeAccount.id,
+        });
 
-        if (selectedTradeType) {
-          delete normalizedPayload.direction;
-          delete normalizedPayload.contract_type;
+        if (result?.success || result?.id) {
+          setError(null);
+          // Refresh trade lists
+          setTrades((prev) => [result, ...prev]);
+          if (result.status === "OPEN") {
+            setOpenTrades((prev) => [result, ...prev]);
+          }
+          return { success: true, ...result };
+        } else {
+          const errMsg = normalizeError(result);
+          setError(errMsg);
+          return { success: false, error: errMsg };
         }
-
-        const data = await executeTrade(normalizedPayload);
-        const normalizedData = {
-          ...data,
-          trade_type: data?.trade_type || selectedTradeType || null,
-          contract: data?.contract || selectedContract || null,
-        };
-
-        setLastTrade(normalizedData);
-        if (refresh) {
-          refresh();
-        }
-        return { ok: true, data: normalizedData };
       } catch (err) {
-        const message = normalizeError(err);
-        setError(message);
-        return { ok: false, error: message };
+        const errMsg = normalizeError(err);
+        setError(errMsg);
+        console.error("Trade execution error:", err);
+        return { success: false, error: errMsg };
       } finally {
         setLoading(false);
       }
     },
-    [activeAccount?.id, refresh]
+    [activeAccount?.id, setTrades, setOpenTrades]
   );
 
-  return { execute, loading, error, lastTrade };
+  return { execute, loading, error };
 };

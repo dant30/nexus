@@ -410,6 +410,14 @@ async def handle_ws_message(websocket: WebSocket, user_id: int, account_id: int,
     """Handle incoming WebSocket messages."""
     event_type = data.get("type")
     
+    log_info(
+        "WS message received",
+        event_type=event_type,
+        user_id=user_id,
+        account_id=account_id,
+        data_keys=list(data.keys()) if isinstance(data, dict) else "N/A"
+    )
+    
     if event_type == "subscribe":
         # Subscribe to market data
         symbol = data.get("symbol")
