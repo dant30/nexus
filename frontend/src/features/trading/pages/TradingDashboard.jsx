@@ -1,5 +1,4 @@
 import React, { useState } from "react";
-import { ManualTrading } from "./ManualTrading.jsx";
 import { AutoTrading } from "./AutoTrading.jsx";
 import { SignalsMonitor } from "./SignalsMonitor.jsx";
 import { OpenTrades } from "../components/TradeHistory/OpenTrades.jsx";
@@ -9,13 +8,12 @@ import { WSStatusBanner } from "../components/WSStatusBanner.jsx";
 import { WSErrorToast } from "../components/WSErrorToast.jsx";
 
 const tabs = [
-  { id: "manual", label: "Manual" },
   { id: "auto", label: "Auto" },
   { id: "signals", label: "Signals" },
 ];
 
 export function TradingDashboard() {
-  const [activeTab, setActiveTab] = useState("manual");
+  const [activeTab, setActiveTab] = useState("auto");
 
   return (
     <div className="space-y-6 p-6 text-white">
@@ -40,7 +38,6 @@ export function TradingDashboard() {
         ))}
       </div>
 
-      {activeTab === "manual" && <ManualTrading />}
       {activeTab === "auto" && <AutoTrading />}
       {activeTab === "signals" && <SignalsMonitor />}
 

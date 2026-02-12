@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { BotStatus } from "../components/BotControls/BotStatus.jsx";
 import { StrategySelector } from "../components/BotControls/StrategySelector.jsx";
 import { StakeSettings } from "../components/BotControls/StakeSettings.jsx";
@@ -13,18 +13,9 @@ import { useTradingContext } from "../contexts/TradingContext.jsx";
 import { TRADING } from "../../../core/constants/trading.js";
 import { TradeTypeSelector } from "../components/TradePanel/TradeTypeSelector.jsx";
 import { useSignals } from "../hooks/useSignals.js";
-import { useTrading } from "../hooks/useTrading.js";
 import { useMarketData } from "../hooks/useMarketData.js";
 import { useAccountContext } from "../../accounts/contexts/AccountContext.jsx";
 import { useWebSocket } from "../../../providers/WSProvider.jsx";
-
-const STRATEGY_SIGNAL_KEYS = {
-  scalping: "ScalpingStrategy",
-  breakout: "BreakoutStrategy",
-  momentum: "MomentumStrategy",
-};
-
-const LOOP_INTERVAL_MS = 3000;
 
 const toNumber = (value, fallback = 0) => {
   const n = Number(value);
@@ -39,43 +30,11 @@ const resolveDurationSeconds = (durationValue, durationUnit) => {
   return value * 3600;
 };
 
-const mapContractToDirection = (tradeType, contract) => {
-  if (tradeType === "RISE_FALL") return contract;
-  return contract === "CALL" ? "RISE" : "FALL";
-};
-
-const extractSignalDecision = (signal, strategy) => {
-  if (!signal) return { direction: null, confidence: 0 };
-
-  const strategyKey = STRATEGY_SIGNAL_KEYS[strategy];
-  const strategySignal = (signal.strategies || []).find((entry) => entry.strategy === strategyKey);
-  const strategyDirection = strategySignal?.signal;
-  if (strategyDirection === "RISE" || strategyDirection === "FALL") {
-    return {
-      direction: strategyDirection,
-      confidence: toNumber(strategySignal?.confidence, 0),
-    };
-  }
-
-  const consensusDirection = signal?.consensus?.decision || signal?.direction;
-  if (consensusDirection === "RISE" || consensusDirection === "FALL") {
-    return {
-      direction: consensusDirection,
-      confidence: toNumber(signal?.consensus?.confidence ?? signal?.confidence, 0),
-    };
-  }
-
-  return {
-    direction: null,
-    confidence: toNumber(signal?.consensus?.confidence ?? signal?.confidence, 0),
-  };
-};
-
 export function AutoTrading() {
   const { running, setRunning, strategy, setStrategy, setLastEvent } = useBotContext();
-  const { timeframeSeconds, setTimeframeSeconds, openTrades, refresh } = useTradingContext();
+  const { timeframeSeconds, setTimeframeSeconds } = useTradingContext();
   const { activeAccount } = useAccountContext();
-  const { sendMessage, connected } = useWebSocket();
+  const { sendMessage, connected, onMessage } = useWebSocket();
 
   const [market, setMarket] = useState("R_50");
   const [stake, setStake] = useState(5);
@@ -86,28 +45,38 @@ export function AutoTrading() {
   );
   const [durationValue, setDurationValue] = useState(1);
   const [durationUnit, setDurationUnit] = useState("ticks");
-  const [dailyLossUsed, setDailyLossUsed] = useState(0);
   const [cooldownSeconds, setCooldownSeconds] = useState(10);
   const [maxTradesPerSession, setMaxTradesPerSession] = useState(5);
   const [minConfidence, setMinConfidence] = useState(TRADING.MIN_SIGNAL_CONFIDENCE);
   const [sessionTrades, setSessionTrades] = useState(0);
   const [cooldownUntil, setCooldownUntil] = useState(0);
+  const [loading, setLoading] = useState(false);
 
   const { signals } = useSignals();
-  const { execute, loading, error } = useTrading();
-
-  // Keeps WS subscription active for selected market and timeframe.
   useMarketData(market, timeframeSeconds);
+
+  useEffect(() => {
+    const off = onMessage("bot_status", (payload, message) => {
+      const status = payload || message || {};
+      const reason = status.reason || "Bot status updated.";
+      setLastEvent({ message: reason, timestamp: Date.now() });
+      if (typeof status.session_trades === "number") {
+        setSessionTrades(status.session_trades);
+      }
+      if (typeof status.cooldown_until === "number") {
+        setCooldownUntil(status.cooldown_until * 1000);
+      }
+      if (status.state === "stopped") {
+        setRunning(false);
+      }
+    });
+    return () => off?.();
+  }, [onMessage, setLastEvent, setRunning]);
 
   const activeSignal = useMemo(
     () => (signals || []).find((signal) => signal.symbol === market) || null,
     [signals, market]
   );
-
-  const lastTradeKeyRef = useRef(null);
-  const inFlightRef = useRef(false);
-  const lastSignalsRequestRef = useRef(0);
-  const lastTradesRefreshRef = useRef(0);
 
   const handleTradeTypeChange = (nextTradeType) => {
     setTradeType(nextTradeType);
@@ -119,7 +88,10 @@ export function AutoTrading() {
 
   const normalizedCooldownSeconds = Math.max(0, Math.floor(toNumber(cooldownSeconds, 0)));
   const normalizedMaxTradesPerSession = Math.max(1, Math.floor(toNumber(maxTradesPerSession, 1)));
-  const normalizedMinConfidence = Math.min(1, Math.max(0, toNumber(minConfidence, TRADING.MIN_SIGNAL_CONFIDENCE)));
+  const normalizedMinConfidence = Math.min(
+    1,
+    Math.max(0, toNumber(minConfidence, TRADING.MIN_SIGNAL_CONFIDENCE))
+  );
   const cooldownRemainingSeconds = Math.max(
     0,
     Math.ceil((toNumber(cooldownUntil, 0) - Date.now()) / 1000)
@@ -129,206 +101,48 @@ export function AutoTrading() {
 
   const toggleBot = async () => {
     if (running) {
+      sendMessage("bot_stop", { symbol: market });
       setRunning(false);
-      setLastEvent({ message: "Bot stopped", timestamp: Date.now() });
+      setLastEvent({ message: "Bot stopped.", timestamp: Date.now() });
       return;
     }
 
-    if (!canRun) {
+    if (!canRun || !connected) {
       setLastEvent({
-        message: "Cannot start bot: select account and valid stake.",
+        message: "Cannot start bot: check account, stake, and WebSocket connection.",
         timestamp: Date.now(),
       });
       return;
     }
 
-    setSessionTrades(0);
-    setCooldownUntil(0);
-    setDailyLossUsed(0);
-    lastTradeKeyRef.current = null;
-    lastSignalsRequestRef.current = 0;
-    lastTradesRefreshRef.current = 0;
+    setLoading(true);
+    try {
+      const durationSeconds = resolveDurationSeconds(durationValue, durationUnit);
+      setSessionTrades(0);
+      setCooldownUntil(0);
 
-    setRunning(true);
-    if (connected) {
-      sendMessage("signals_snapshot");
-      sendMessage("market_snapshot", { symbol: market, interval: timeframeSeconds });
+      sendMessage("bot_start", {
+        symbol: market,
+        interval: timeframeSeconds,
+        stake: Number(stake),
+        duration_seconds: durationSeconds,
+        trade_type: tradeType,
+        contract,
+        strategy,
+        min_confidence: normalizedMinConfidence,
+        cooldown_seconds: normalizedCooldownSeconds,
+        max_trades_per_session: normalizedMaxTradesPerSession,
+        daily_loss_limit: Math.max(0, toNumber(dailyLimit, 0)),
+      });
+      setRunning(true);
+      setLastEvent({
+        message: `Bot started on ${market} (${tradeType} ${contract}).`,
+        timestamp: Date.now(),
+      });
+    } finally {
+      setLoading(false);
     }
-    if (refresh) {
-      refresh().catch(() => null);
-    }
-    setLastEvent({
-      message: `Bot started on ${market} (${tradeType} ${contract}) with ${Math.round(
-        normalizedMinConfidence * 100
-      )}% min confidence.`,
-      timestamp: Date.now(),
-    });
   };
-
-  useEffect(() => {
-    if (!running) return;
-
-    const timer = setInterval(async () => {
-      if (inFlightRef.current) return;
-      if (!canRun) return;
-
-      const now = Date.now();
-      if (connected && now - lastSignalsRequestRef.current >= LOOP_INTERVAL_MS) {
-        sendMessage("signals_snapshot");
-        lastSignalsRequestRef.current = now;
-      }
-
-      if (refresh && now - lastTradesRefreshRef.current >= 5000) {
-        lastTradesRefreshRef.current = now;
-        await refresh().catch(() => null);
-      }
-
-      if (sessionTrades >= normalizedMaxTradesPerSession) {
-        setRunning(false);
-        setLastEvent({
-          message: "Max trades per session reached. Bot stopped.",
-          timestamp: Date.now(),
-        });
-        return;
-      }
-
-      const cooldownMs = normalizedCooldownSeconds * 1000;
-      if (cooldownMs > 0 && Date.now() < cooldownUntil) {
-        const remainingSeconds = Math.max(0, Math.ceil((cooldownUntil - Date.now()) / 1000));
-        setLastEvent({
-          message: `Cooldown active (${remainingSeconds}s remaining).`,
-          timestamp: Date.now(),
-        });
-        return;
-      }
-
-      if ((openTrades || []).length > 0) {
-        setLastEvent({
-          message: "Waiting for open trade to close.",
-          timestamp: Date.now(),
-        });
-        return;
-      }
-
-      const maxLoss = Math.max(0, toNumber(dailyLimit, 0));
-      if (dailyLossUsed >= maxLoss && maxLoss > 0) {
-        setRunning(false);
-        setLastEvent({
-          message: "Daily loss limit reached. Bot stopped.",
-          timestamp: Date.now(),
-        });
-        return;
-      }
-
-      const { direction: signalDirection, confidence: signalConfidence } = extractSignalDecision(
-        activeSignal,
-        strategy
-      );
-      if (!signalDirection) {
-        setLastEvent({
-          message: "No actionable signal yet (waiting for a fresh signal snapshot).",
-          timestamp: Date.now(),
-        });
-        return;
-      }
-
-      if (signalConfidence < normalizedMinConfidence) {
-        setLastEvent({
-          message: `Signal confidence ${(signalConfidence * 100).toFixed(
-            0
-          )}% below minimum ${Math.round(normalizedMinConfidence * 100)}%.`,
-          timestamp: Date.now(),
-        });
-        return;
-      }
-
-      const configuredDirection = mapContractToDirection(tradeType, contract);
-      if (configuredDirection !== signalDirection) {
-        setLastEvent({
-          message: `Signal ${signalDirection}; waiting for ${configuredDirection}.`,
-          timestamp: Date.now(),
-        });
-        return;
-      }
-
-      const signalId = activeSignal?.id || `${activeSignal?.symbol}-${signalDirection}`;
-      const tradeKey = `${signalId}-${configuredDirection}-${market}-${durationValue}-${durationUnit}`;
-      if (lastTradeKeyRef.current === tradeKey) {
-        return;
-      }
-
-      inFlightRef.current = true;
-      try {
-        const durationSeconds = resolveDurationSeconds(durationValue, durationUnit);
-
-        const result = await execute({
-          symbol: market,
-          contract_type: contract,
-          direction: configuredDirection,
-          stake: Number(stake),
-          duration_seconds: durationSeconds,
-          account_id: activeAccount.id,
-        });
-
-        if (result?.success) {
-          lastTradeKeyRef.current = tradeKey;
-          setSessionTrades((prev) => prev + 1);
-          setLastEvent({
-            message: `Trade executed: ${contract} ${market} - Stake $${stake}`,
-            timestamp: Date.now(),
-          });
-
-          if (result.profit && result.profit < 0) {
-            setDailyLossUsed((prev) => prev + Math.abs(result.profit));
-          }
-
-          if (normalizedCooldownSeconds > 0) {
-            setCooldownUntil(Date.now() + normalizedCooldownSeconds * 1000);
-          }
-        } else {
-          setLastEvent({
-            message: `Trade failed: ${result?.error || "Unknown error"}`,
-            timestamp: Date.now(),
-          });
-        }
-      } catch (err) {
-        setLastEvent({
-          message: `Trade error: ${err?.message || "Unknown error"}`,
-          timestamp: Date.now(),
-        });
-      } finally {
-        inFlightRef.current = false;
-      }
-    }, LOOP_INTERVAL_MS);
-
-    return () => clearInterval(timer);
-  }, [
-    running,
-    canRun,
-    openTrades,
-    sessionTrades,
-    normalizedMaxTradesPerSession,
-    normalizedCooldownSeconds,
-    cooldownUntil,
-    normalizedMinConfidence,
-    dailyLossUsed,
-    dailyLimit,
-    activeSignal,
-    strategy,
-    tradeType,
-    contract,
-    market,
-    durationValue,
-    durationUnit,
-    stake,
-    activeAccount?.id,
-    execute,
-    setLastEvent,
-    setRunning,
-    refresh,
-    sendMessage,
-    connected,
-  ]);
 
   return (
     <div className="space-y-4">
@@ -423,16 +237,15 @@ export function AutoTrading() {
               Signal confidence:{" "}
               {Math.round(
                 toNumber(activeSignal?.consensus?.confidence ?? activeSignal?.confidence, 0) * 100
-              )}%
+              )}
+              %
             </p>
             <p>
               Session trades: {sessionTrades} / {normalizedMaxTradesPerSession}
             </p>
             <p>Cooldown remaining: {cooldownRemainingSeconds}s</p>
-            <p>Loss used: {dailyLossUsed.toFixed(2)} / {toNumber(dailyLimit, 0).toFixed(2)}</p>
           </div>
 
-          {error && <p className="text-xs text-rose-300">{error}</p>}
           <TradeButton
             onClick={toggleBot}
             loading={loading && running}

@@ -2,8 +2,10 @@
 FastAPI application entry point for Nexus Trading Bot.
 Integrates Django ORM, WebSocket, and trading engine.
 """
+import asyncio
 import time
 from contextlib import asynccontextmanager
+from decimal import Decimal
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -30,10 +32,14 @@ from fastapi_app.trading_engine.strategies import (
     BreakoutStrategy,
     ScalpingStrategy,
 )
+from django.contrib.auth import get_user_model
 from django_core.accounts.models import Account
+from django_core.trades.models import Trade
 
+User = get_user_model()
 
 DERIV_SYMBOLS = set(settings.DERIV_SYMBOLS)
+BOT_LOOP_INTERVAL_SECONDS = 3
 
 # Global state for WebSocket & trading engine
 class AppState:
@@ -341,6 +347,159 @@ async def _signal_from_engine(symbol: str, ticks: list, candles: list, interval:
     }
 
 
+def _resolve_direction_from_trade_config(trade_type: str, contract: str):
+    if trade_type == "RISE_FALL" and contract in {"RISE", "FALL"}:
+        return contract
+    if trade_type == "CALL_PUT" and contract in {"CALL", "PUT"}:
+        return "RISE" if contract == "CALL" else "FALL"
+    return None
+
+
+def _extract_signal_decision(signal: dict, strategy: str):
+    strategy_map = {
+        "scalping": "ScalpingStrategy",
+        "breakout": "BreakoutStrategy",
+        "momentum": "MomentumStrategy",
+    }
+    strategy_key = strategy_map.get((strategy or "").lower())
+    entries = signal.get("strategies") or []
+    if strategy_key:
+        match = next((entry for entry in entries if entry.get("strategy") == strategy_key), None)
+        if match and match.get("signal") in {"RISE", "FALL"}:
+            return match.get("signal"), float(match.get("confidence") or 0)
+
+    consensus = signal.get("consensus") or {}
+    decision = consensus.get("decision") or signal.get("direction")
+    if decision in {"RISE", "FALL"}:
+        return decision, float(consensus.get("confidence") or signal.get("confidence") or 0)
+    return None, float(consensus.get("confidence") or signal.get("confidence") or 0)
+
+
+async def _send_bot_status(connection_id: str, data: dict):
+    websocket = app.state.ws_connections.get(connection_id)
+    if not websocket:
+        return
+    await _send_event(websocket, "bot_status", data)
+
+
+async def _stop_bot(connection_id: str, reason: str = "stopped", notify: bool = True):
+    state = app.state.bot_instances.pop(connection_id, None)
+    if not state:
+        return
+    task = state.get("task") if isinstance(state, dict) else None
+    if task and not task.done():
+        task.cancel()
+    if notify:
+        await _send_bot_status(
+            connection_id,
+            {
+                "state": "stopped",
+                "reason": reason,
+            },
+        )
+
+
+async def _maybe_execute_bot_trade(
+    connection_id: str,
+    user_id: int,
+    account_id: int,
+    account: Account,
+    signal: dict,
+):
+    bot_state = app.state.bot_instances.get(connection_id)
+    if not bot_state or not bot_state.get("enabled"):
+        return
+
+    if bot_state.get("symbol") != signal.get("symbol"):
+        return
+
+    if bot_state.get("session_trades", 0) >= bot_state.get("max_trades_per_session", 1):
+        await _stop_bot(connection_id, reason="max_trades_per_session")
+        return
+
+    now = time.time()
+    if now < float(bot_state.get("cooldown_until", 0)):
+        return
+
+    has_open_trade = await sync_to_async(
+        lambda: Trade.objects.filter(
+            user_id=user_id,
+            account_id=account_id,
+            status=Trade.STATUS_OPEN,
+        ).exists()
+    )()
+    if has_open_trade:
+        return
+
+    decision, confidence = _extract_signal_decision(signal, bot_state.get("strategy"))
+    if decision not in {"RISE", "FALL"}:
+        return
+    if confidence < float(bot_state.get("min_confidence", 0.5)):
+        return
+
+    configured_direction = bot_state.get("direction")
+    if configured_direction and configured_direction != decision:
+        return
+
+    signal_id = signal.get("id") or f"{signal.get('symbol')}-{decision}"
+    trade_key = (
+        f"{signal_id}:{decision}:{bot_state.get('symbol')}:{bot_state.get('duration_seconds')}:"
+        f"{bot_state.get('trade_type')}:{bot_state.get('contract')}"
+    )
+    if bot_state.get("last_trade_key") == trade_key:
+        return
+
+    from fastapi_app.api.trades import _execute_trade_internal
+
+    user = await sync_to_async(User.objects.get)(id=user_id)
+    trade = await _execute_trade_internal(
+        app=app,
+        user=user,
+        account=account,
+        symbol=bot_state.get("symbol"),
+        direction=decision,
+        stake=Decimal(str(bot_state.get("stake"))),
+        duration_seconds=int(bot_state.get("duration_seconds", 60)),
+        contract_type="CALL" if decision == "RISE" else "PUT",
+        contract=bot_state.get("contract"),
+        trade_type=bot_state.get("trade_type"),
+    )
+
+    bot_state["last_trade_key"] = trade_key
+    bot_state["session_trades"] = int(bot_state.get("session_trades", 0)) + 1
+    bot_state["cooldown_until"] = now + int(bot_state.get("cooldown_seconds", 0))
+    app.state.bot_instances[connection_id] = bot_state
+
+    await _send_bot_status(
+        connection_id,
+        {
+            "state": "running",
+            "reason": f"Auto trade executed: {decision}",
+            "trade_id": trade.id,
+            "session_trades": bot_state.get("session_trades"),
+            "cooldown_until": bot_state.get("cooldown_until"),
+            "confidence": confidence,
+            "symbol": bot_state.get("symbol"),
+        },
+    )
+
+
+async def _bot_loop(websocket: WebSocket, user_id: int, account_id: int, connection_id: str):
+    while True:
+        if connection_id not in app.state.ws_connections:
+            return
+        bot_state = app.state.bot_instances.get(connection_id)
+        if not bot_state or not bot_state.get("enabled"):
+            return
+        try:
+            await handle_ws_message(websocket, user_id, account_id, {"type": "signals_snapshot"})
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            log_error("Bot loop iteration failed", exception=exc, connection_id=connection_id)
+        await asyncio.sleep(BOT_LOOP_INTERVAL_SECONDS)
+
+
 def _prune_disconnected_websocket(websocket: WebSocket, reason: str = "disconnected"):
     stale_connection_ids = [
         connection_id
@@ -351,6 +510,10 @@ def _prune_disconnected_websocket(websocket: WebSocket, reason: str = "disconnec
         return
 
     for connection_id in stale_connection_ids:
+        bot_state = app.state.bot_instances.pop(connection_id, None)
+        task = bot_state.get("task") if isinstance(bot_state, dict) else None
+        if task and not task.done():
+            task.cancel()
         app.state.ws_connections.pop(connection_id, None)
         app.state.ws_subscriptions.pop(connection_id, None)
 
@@ -414,6 +577,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, account_id: int
             await handle_ws_message(websocket, user_id, account_id, data)
             
     except WebSocketDisconnect:
+        await _stop_bot(connection_id, reason="websocket_disconnect")
         if connection_id in app.state.ws_connections:
             del app.state.ws_connections[connection_id]
         app.state.ws_subscriptions.pop(connection_id, None)
@@ -430,6 +594,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, account_id: int
             user_id=user_id,
             account_id=account_id,
         )
+        await _stop_bot(connection_id, reason="websocket_error")
         if connection_id in app.state.ws_connections:
             del app.state.ws_connections[connection_id]
         app.state.ws_subscriptions.pop(connection_id, None)
@@ -485,6 +650,83 @@ async def handle_ws_message(websocket: WebSocket, user_id: int, account_id: int,
         if connection_id in app.state.ws_subscriptions:
             app.state.ws_subscriptions[connection_id].pop(symbol, None)
 
+    elif event_type == "bot_start":
+        connection_id = f"{user_id}_{account_id}"
+        await _stop_bot(connection_id, reason="restart", notify=False)
+        symbol = data.get("symbol")
+        interval = int(data.get("interval") or 60)
+        trade_type = (data.get("trade_type") or "RISE_FALL").upper()
+        contract = (data.get("contract") or "RISE").upper()
+        direction = _resolve_direction_from_trade_config(trade_type, contract)
+        bot_state = {
+            "enabled": True,
+            "symbol": symbol,
+            "interval": interval,
+            "stake": float(data.get("stake") or 0),
+            "duration_seconds": int(data.get("duration_seconds") or 60),
+            "trade_type": trade_type,
+            "contract": contract,
+            "direction": direction,
+            "strategy": (data.get("strategy") or "scalping").lower(),
+            "min_confidence": float(data.get("min_confidence") or 0.5),
+            "cooldown_seconds": int(data.get("cooldown_seconds") or 0),
+            "max_trades_per_session": int(data.get("max_trades_per_session") or 1),
+            "session_trades": 0,
+            "cooldown_until": 0,
+            "last_trade_key": None,
+            "task": None,
+        }
+        if not symbol or bot_state["stake"] <= 0:
+            await _send_bot_status(
+                connection_id,
+                {
+                    "state": "stopped",
+                    "reason": "Invalid bot settings. Symbol and positive stake are required.",
+                },
+            )
+            return
+        if symbol not in DERIV_SYMBOLS:
+            await _send_bot_status(
+                connection_id,
+                {
+                    "state": "stopped",
+                    "reason": f"Unsupported symbol: {symbol}",
+                },
+            )
+            return
+
+        app.state.bot_instances[connection_id] = bot_state
+
+        app.state.ws_subscriptions.setdefault(connection_id, {})[symbol] = {
+            "interval": interval,
+            "ticks": app.state.market_ticks.get(symbol, [])[-600:],
+            "last_candle": 0,
+            "symbol": symbol,
+        }
+        if app.state.deriv_client:
+            if symbol not in app.state.deriv_subscriptions:
+                await app.state.deriv_client.subscribe_ticks(symbol)
+                app.state.deriv_subscriptions.add(symbol)
+            await app.state.deriv_client.subscribe_candles(symbol, interval)
+
+        task = asyncio.create_task(_bot_loop(websocket, user_id, account_id, connection_id))
+        bot_state["task"] = task
+        app.state.bot_instances[connection_id] = bot_state
+        await _send_bot_status(
+            connection_id,
+            {
+                "state": "running",
+                "reason": "Bot started.",
+                "symbol": symbol,
+                "session_trades": 0,
+                "cooldown_until": 0,
+            },
+        )
+
+    elif event_type == "bot_stop":
+        connection_id = f"{user_id}_{account_id}"
+        await _stop_bot(connection_id, reason="manual_stop")
+
     elif event_type == "market_snapshot":
         symbol = data.get("symbol")
         interval = int(data.get("interval") or 60)
@@ -502,6 +744,7 @@ async def handle_ws_message(websocket: WebSocket, user_id: int, account_id: int,
         connection_id = f"{user_id}_{account_id}"
         subscriptions = app.state.ws_subscriptions.get(connection_id, {})
         signals = []
+        bot_state = app.state.bot_instances.get(connection_id)
         try:
             account = await sync_to_async(Account.objects.get)(id=account_id, user_id=user_id)
         except Exception as e:
@@ -516,6 +759,14 @@ async def handle_ws_message(websocket: WebSocket, user_id: int, account_id: int,
             signal = await _signal_from_engine(symbol, ticks, candles, interval, account)
             if signal:
                 signals.append(signal)
+                if bot_state and bot_state.get("enabled"):
+                    await _maybe_execute_bot_trade(
+                        connection_id=connection_id,
+                        user_id=user_id,
+                        account_id=account_id,
+                        account=account,
+                        signal=signal,
+                    )
         await _send_event(websocket, "signals", signals)
 
 

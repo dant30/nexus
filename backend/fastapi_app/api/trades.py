@@ -222,7 +222,7 @@ async def execute_trade(
         # Execute trade (via Deriv API or trading engine)
         user = await sync_to_async(User.objects.get)(id=current_user.user_id)
         trade = await _execute_trade_internal(
-            request=request,
+            app=request.app,
             user=user,
             account=account,
             symbol=payload.symbol,
@@ -253,7 +253,7 @@ async def execute_trade(
 
 
 async def _execute_trade_internal(
-    request: Request,
+    app,
     user,
     account,
     symbol,
@@ -273,8 +273,6 @@ async def _execute_trade_internal(
     5. broadcast WS trade_status to connected clients
     """
     from django_core.trades.services import create_trade
-    app = request.app
-
     # create local trade record (does not block execution)
     trade = await sync_to_async(create_trade)(
         user=user,
