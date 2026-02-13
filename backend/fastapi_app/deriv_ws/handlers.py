@@ -14,6 +14,19 @@ logger = get_logger("deriv_handlers")
 
 def broadcast_balance_update(account_id: int, balance: float, currency: Optional[str] = None) -> None:
     """Best-effort broadcast of balance updates to connected frontend WS clients."""
+    # Handle case where account_id might be a string like "CR123456"
+    if isinstance(account_id, str):
+        try:
+            # Extract numeric part if possible
+            import re
+            match = re.search(r'(\d+)$', account_id)
+            if match:
+                account_id = int(match.group(1))
+            else:
+                account_id = 0
+        except:
+            account_id = 0
+    
     payload = {
         "type": "balance_update",
         "data": {

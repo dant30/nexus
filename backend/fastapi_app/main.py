@@ -75,6 +75,7 @@ async def lifespan(app: FastAPI):
         app.state.deriv_client = DerivWebSocketClient(
             settings.DERIV_APP_ID,
             settings.DERIV_API_KEY,
+            user_id=None  # Explicitly mark as shared client
         )
 
         async def _deriv_callback(payload):

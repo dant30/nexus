@@ -171,6 +171,25 @@ class SubscriptionManager:
         sub_ids = self._symbol_subscriptions.get(symbol, set())
         return [self._subscriptions[sub_id] for sub_id in sub_ids if sub_id in self._subscriptions]
     
+    # ========== FIX: Add this missing method ==========
+    def get_by_user_symbol_event(self, user_id: int, symbol: str, event_type: EventName) -> Optional[Subscription]:
+        """
+        Get subscription for a specific user, symbol, and event type.
+        
+        Args:
+            user_id: User ID
+            symbol: Trading symbol
+            event_type: Event type (e.g., "tick", "ohlc")
+        
+        Returns:
+            Subscription if found, None otherwise
+        """
+        subscriptions = self.get_by_user(user_id)
+        for sub in subscriptions:
+            if sub.symbol == symbol and sub.event_type == event_type:
+                return sub
+        return None
+    
     def remove_by_user(self, user_id: int) -> List[int]:
         """Remove all subscriptions for a user. Returns removed subscription IDs."""
         sub_ids = self._user_subscriptions.pop(user_id, set())

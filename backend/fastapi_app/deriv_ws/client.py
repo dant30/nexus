@@ -268,7 +268,14 @@ class DerivWebSocketClient:
     
     async def subscribe_ticks(self, symbol: str) -> bool:
         """Subscribe to real-time ticks for a symbol."""
-        # Check if already subscribed
+        # Skip if no user_id (shared client)
+        if self.user_id is None:
+            # Send subscription request without tracking
+            request = DerivSerializer.subscribe_ticks(symbol)
+            response = await self.request(request, timeout=10)
+            return response is not None
+        
+        # Check if already subscribed (only for user-specific clients)
         existing = subscription_manager.get_by_user_symbol_event(
             self.user_id, symbol, DerivEventType.TICK.value
         )
