@@ -1,10 +1,9 @@
 """
-Risk management engine.
-Enforces trading limits and risk rules.
+Professional risk management engine with comprehensive safeguards.
 """
 from decimal import Decimal
-from typing import Optional, List, Dict
-from dataclasses import dataclass
+from typing import Optional, List, Dict, Tuple
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
 from django_core.accounts.models import Account
@@ -17,29 +16,33 @@ logger = get_logger("risk")
 
 @dataclass
 class RiskAssessment:
-    """Risk assessment result."""
+    """Professional risk assessment result."""
     is_approved: bool
     reason: str
     risk_level: str  # "LOW", "MEDIUM", "HIGH", "CRITICAL"
-    issues: List[str]
+    issues: List[str] = field(default_factory=list)
+    max_stake: Optional[Decimal] = None
+    recommended_stake: Optional[Decimal] = None
 
 
 class RiskManager:
     """
-    Manage trading risk and enforce limits.
+    Professional risk management system.
     
     Enforces:
-    - Account balance limits
-    - Daily loss limits
-    - Consecutive loss limits
-    - Stake size limits
-    - Leverage limits
+    - Minimum/Maximum stake limits
+    - Account balance sufficiency
+    - Daily loss limits (10% of balance)
+    - Consecutive loss limits (5 max)
+    - Hourly trade frequency (60 max)
+    - Position sizing based on account balance
     """
     
-    # Default limits
+    # Default limits (conservative for demo trading)
     MIN_STAKE = Decimal("0.35")
-    MAX_STAKE = Decimal("1000.00")
-    MAX_DAILY_LOSS_PERCENT = Decimal("10")  # 10% of balance
+    MAX_STAKE = Decimal("50.00")  # Reduced for safety
+    MAX_STAKE_PERCENT_OF_BALANCE = Decimal("5")  # 5% max per trade
+    MAX_DAILY_LOSS_PERCENT = Decimal("10")  # 10% daily loss limit
     MAX_CONSECUTIVE_LOSSES = 5
     MAX_TRADES_PER_HOUR = 60
     
@@ -48,18 +51,13 @@ class RiskManager:
         min_stake: Optional[Decimal] = None,
         max_stake: Optional[Decimal] = None,
         max_daily_loss_percent: Optional[Decimal] = None,
+        max_consecutive_losses: Optional[int] = None,
     ):
-        """
-        Initialize risk manager.
-        
-        Args:
-        - min_stake: Minimum trade stake
-        - max_stake: Maximum trade stake
-        - max_daily_loss_percent: Maximum daily loss as % of balance
-        """
+        """Initialize risk manager with configurable limits."""
         self.min_stake = min_stake or self.MIN_STAKE
         self.max_stake = max_stake or self.MAX_STAKE
         self.max_daily_loss_percent = max_daily_loss_percent or self.MAX_DAILY_LOSS_PERCENT
+        self.max_consecutive_losses = max_consecutive_losses or self.MAX_CONSECUTIVE_LOSSES
     
     async def assess_trade(
         self,
@@ -67,69 +65,91 @@ class RiskManager:
         stake: Decimal,
     ) -> RiskAssessment:
         """
-        Assess risk of proposed trade.
-        
-        Args:
-        - account: Trading account
-        - stake: Proposed stake amount
+        Comprehensive trade risk assessment.
         
         Returns:
-        - RiskAssessment with approval decision
+            RiskAssessment with approval decision and recommendations
         """
         issues = []
         risk_level = "LOW"
         
-        # Check account balance
+        # 1. ACCOUNT BALANCE CHECK
         if account.balance <= 0:
-            issues.append("Account balance is zero or negative")
+            issues.append(f"Zero/negative balance: {float(account.balance)}")
             risk_level = "CRITICAL"
         
-        # Check stake limits
+        # 2. STAKE LIMIT CHECKS
         if stake < self.min_stake:
-            issues.append(f"Stake {float(stake)} below minimum {float(self.min_stake)}")
+            issues.append(f"Stake {float(stake)} < minimum {float(self.min_stake)}")
             risk_level = "HIGH"
         
         if stake > self.max_stake:
-            issues.append(f"Stake {float(stake)} exceeds maximum {float(self.max_stake)}")
+            issues.append(f"Stake {float(stake)} > maximum {float(self.max_stake)}")
             risk_level = "HIGH"
         
+        # 3. POSITION SIZING CHECK
+        max_position = account.balance * (self.MAX_STAKE_PERCENT_OF_BALANCE / Decimal("100"))
+        if stake > max_position:
+            issues.append(f"Stake {float(stake)} > {self.MAX_STAKE_PERCENT_OF_BALANCE}% of balance ({float(max_position)})")
+            risk_level = "HIGH"
+        
+        # 4. SUFFICIENT BALANCE CHECK
         if stake > account.balance:
-            issues.append(f"Stake exceeds account balance ({float(account.balance)})")
+            issues.append(f"Stake exceeds balance ({float(account.balance)})")
             risk_level = "CRITICAL"
         
-        # Check daily loss limit
+        # 5. DAILY LOSS LIMIT CHECK
         daily_loss = await self._calculate_daily_loss(account)
         max_allowed_loss = account.balance * (self.max_daily_loss_percent / Decimal("100"))
         
         if daily_loss >= max_allowed_loss:
-            issues.append(
-                f"Daily loss limit reached ({float(daily_loss)} / {float(max_allowed_loss)})"
-            )
+            issues.append(f"Daily loss limit reached: {float(daily_loss)}/{float(max_allowed_loss)}")
             risk_level = "CRITICAL"
+        elif daily_loss > max_allowed_loss * Decimal("0.8"):
+            issues.append(f"Approaching daily loss limit: {float(daily_loss)}/{float(max_allowed_loss)}")
+            risk_level = "HIGH" if risk_level != "CRITICAL" else risk_level
         
-        # Check consecutive losses
+        # 6. CONSECUTIVE LOSS CHECK
         consecutive_losses = await self._count_consecutive_losses(account)
-        if consecutive_losses >= self.MAX_CONSECUTIVE_LOSSES:
-            issues.append(f"Max consecutive losses reached ({consecutive_losses})")
+        if consecutive_losses >= self.max_consecutive_losses:
+            issues.append(f"Max consecutive losses reached: {consecutive_losses}")
             risk_level = "HIGH"
+        elif consecutive_losses >= self.max_consecutive_losses - 2:
+            issues.append(f"Near max consecutive losses: {consecutive_losses}/{self.max_consecutive_losses}")
+            risk_level = "MEDIUM" if risk_level not in ["HIGH", "CRITICAL"] else risk_level
         
-        # Check hourly trade limit
+        # 7. HOURLY TRADE LIMIT CHECK
         trades_this_hour = await self._count_trades_this_hour(account)
         if trades_this_hour >= self.MAX_TRADES_PER_HOUR:
-            issues.append(f"Hourly trade limit reached ({trades_this_hour})")
+            issues.append(f"Hourly trade limit reached: {trades_this_hour}")
             risk_level = "MEDIUM"
         
-        # Determine final decision
-        is_approved = not issues or (risk_level == "LOW" or risk_level == "MEDIUM")
+        # 8. RECOMMENDED STAKE CALCULATION
+        recommended_stake = self._calculate_recommended_stake(account)
         
-        reason = "Trade approved" if is_approved else f"Trade rejected: {issues[0]}"
+        # FINAL DECISION
+        # Only approve if no critical issues and not too many high issues
+        critical_issues = [i for i in issues if "CRITICAL" in risk_level or "exceeds balance" in i or "limit reached" in i]
+        high_issues = [i for i in issues if "HIGH" in risk_level or "below minimum" in i or "exceeds maximum" in i]
+        
+        is_approved = len(critical_issues) == 0 and len(high_issues) <= 1
+        
+        reason = "Trade approved" if is_approved else f"Rejected: {issues[0] if issues else 'Risk check failed'}"
+        
+        # Calculate safe max stake for this trade
+        max_stake = min(
+            self.max_stake,
+            account.balance * Decimal("0.1"),  # 10% of balance max
+            max_position,
+        )
         
         log_info(
-            f"Trade assessment: {risk_level}",
+            f"Trade risk assessment: {risk_level}",
             account_id=account.id,
             stake=float(stake),
             approved=is_approved,
-            issues=issues,
+            risk_level=risk_level,
+            issue_count=len(issues),
         )
         
         return RiskAssessment(
@@ -137,50 +157,61 @@ class RiskManager:
             reason=reason,
             risk_level=risk_level,
             issues=issues,
+            max_stake=max_stake,
+            recommended_stake=recommended_stake,
         )
     
-    async def _calculate_daily_loss(self, account: Account) -> Decimal:
-        """Calculate total loss for today."""
+    def _calculate_recommended_stake(self, account: Account) -> Decimal:
+        """Calculate recommended stake based on account balance."""
+        # Conservative: 1% of balance
+        recommended = account.balance * Decimal("0.01")
+        
+        # Clamp to min/max
+        recommended = max(recommended, self.min_stake)
+        recommended = min(recommended, self.max_stake)
+        recommended = min(recommended, account.balance * Decimal("0.05"))  # Max 5%
+        
+        return recommended.quantize(Decimal("0.01"))
+    
+    @sync_to_async
+    def _calculate_daily_loss(self, account: Account) -> Decimal:
+        """Calculate total realized loss for today."""
         today = datetime.utcnow().date()
-        today_trades = await sync_to_async(list)(
-            Trade.objects.filter(
-                account=account,
-                created_at__date=today,
-            )
+        trades = Trade.objects.filter(
+            account=account,
+            created_at__date=today,
+            status=Trade.STATUS_LOST,
         )
         
         total_loss = Decimal("0")
-        for trade in today_trades:
-            if trade.status == Trade.STATUS_CLOSED and trade.profit:
-                if trade.profit < 0:
-                    total_loss += abs(trade.profit)
+        for trade in trades:
+            if trade.profit and trade.profit < 0:
+                total_loss += abs(trade.profit)
         
         return total_loss
     
-    async def _count_consecutive_losses(self, account: Account) -> int:
-        """Count consecutive losing trades."""
-        recent_trades = await sync_to_async(list)(
-            Trade.objects.filter(
-                account=account,
-                status=Trade.STATUS_CLOSED,
-            ).order_by("-created_at")[:10]
-        )
+    @sync_to_async
+    def _count_consecutive_losses(self, account: Account) -> int:
+        """Count current consecutive losing trades."""
+        recent_trades = Trade.objects.filter(
+            account=account,
+            status__in=[Trade.STATUS_WON, Trade.STATUS_LOST],
+        ).order_by("-created_at")[:10]
         
         consecutive = 0
         for trade in recent_trades:
-            if trade.profit and trade.profit < 0:
+            if trade.status == Trade.STATUS_LOST:
                 consecutive += 1
             else:
                 break
         
         return consecutive
     
-    async def _count_trades_this_hour(self, account: Account) -> int:
+    @sync_to_async
+    def _count_trades_this_hour(self, account: Account) -> int:
         """Count trades in the past hour."""
         one_hour_ago = datetime.utcnow() - timedelta(hours=1)
-        return await sync_to_async(
-            Trade.objects.filter(
-                account=account,
-                created_at__gte=one_hour_ago,
-            ).count
-        )()
+        return Trade.objects.filter(
+            account=account,
+            created_at__gte=one_hour_ago,
+        ).count()

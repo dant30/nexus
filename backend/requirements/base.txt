@@ -46,3 +46,7 @@ email-validator>=2.0
 
 # UUID
 shortuuid==1.0.11
+
+# Data Science & Machine Learning
+numpy>=1.24.0,<2.0.0
+
