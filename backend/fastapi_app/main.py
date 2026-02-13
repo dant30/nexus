@@ -385,6 +385,74 @@ def _resolve_trade_execution_from_bot_config(bot_state: dict, decision: str):
     }
 
 
+def _normalize_bot_duration(trade_type: str, data: dict):
+    unit_aliases = {
+        "tick": "t",
+        "ticks": "t",
+        "t": "t",
+        "second": "s",
+        "seconds": "s",
+        "s": "s",
+        "minute": "m",
+        "minutes": "m",
+        "m": "m",
+        "hour": "h",
+        "hours": "h",
+        "h": "h",
+        "day": "d",
+        "days": "d",
+        "d": "d",
+    }
+    duration_unit = unit_aliases.get(str(data.get("duration_unit", "")).lower()) if data.get("duration_unit") else None
+    duration_value = data.get("duration")
+    duration_seconds = int(data.get("duration_seconds") or 60)
+
+    if duration_value is None:
+        # Backward-compat: legacy payload only sends duration_seconds.
+        if trade_type == "CALL_PUT":
+            duration_unit = duration_unit or "m"
+            duration_value = max(1, int((max(1, duration_seconds) + 59) // 60))
+        else:
+            if duration_unit is None:
+                if duration_seconds < 15:
+                    duration_unit = "t"
+                    duration_value = max(1, duration_seconds)
+                else:
+                    duration_unit = "s"
+                    duration_value = max(15, duration_seconds)
+            else:
+                duration_value = max(1, duration_seconds)
+    else:
+        duration_value = max(1, int(duration_value))
+        if duration_unit is None:
+            duration_unit = "t" if trade_type == "RISE_FALL" else "m"
+
+    allowed_units = {"RISE_FALL": {"t", "s", "m", "h", "d"}, "CALL_PUT": {"m", "h", "d"}}
+    min_by_unit = {"t": 1, "s": 15, "m": 1, "h": 1, "d": 1}
+    if trade_type not in allowed_units:
+        trade_type = "RISE_FALL"
+    if duration_unit not in allowed_units[trade_type]:
+        raise ValueError(f"Duration unit '{duration_unit}' is not supported for {trade_type}")
+    if duration_value < min_by_unit[duration_unit]:
+        raise ValueError(
+            f"Duration for unit '{duration_unit}' must be >= {min_by_unit[duration_unit]}"
+        )
+
+    # Keep seconds for DB/history consistency.
+    if duration_unit == "t":
+        normalized_seconds = int(duration_value)
+    elif duration_unit == "s":
+        normalized_seconds = int(duration_value)
+    elif duration_unit == "m":
+        normalized_seconds = int(duration_value) * 60
+    elif duration_unit == "h":
+        normalized_seconds = int(duration_value) * 3600
+    else:
+        normalized_seconds = int(duration_value) * 86400
+
+    return int(duration_value), duration_unit, normalized_seconds
+
+
 def _extract_signal_decision(signal: dict, strategy: str):
     strategy_map = {
         "scalping": "ScalpingStrategy",
@@ -533,7 +601,8 @@ async def _maybe_execute_bot_trade(
 
     signal_id = signal.get("id") or f"{signal.get('symbol')}-{decision}"
     trade_key = (
-        f"{signal_id}:{decision}:{bot_state.get('symbol')}:{bot_state.get('duration_seconds')}:"
+        f"{signal_id}:{decision}:{bot_state.get('symbol')}:{bot_state.get('duration')}:"
+        f"{bot_state.get('duration_unit')}:"
         f"{bot_state.get('stake')}"
     )
     if bot_state.get("last_trade_key") == trade_key:
@@ -568,6 +637,8 @@ async def _maybe_execute_bot_trade(
         confidence=confidence,
         stake=bot_state.get("stake"),
         duration_seconds=bot_state.get("duration_seconds"),
+        duration=bot_state.get("duration"),
+        duration_unit=bot_state.get("duration_unit"),
         contract_type=execution_config["contract_type"],
     )
 
@@ -580,6 +651,8 @@ async def _maybe_execute_bot_trade(
         direction=execution_config["direction"],
         stake=Decimal(str(bot_state.get("stake"))),
         duration_seconds=int(bot_state.get("duration_seconds", 60)),
+        duration=int(bot_state.get("duration", bot_state.get("duration_seconds", 60))),
+        duration_unit=str(bot_state.get("duration_unit") or "s"),
         contract_type=execution_config["contract_type"],
         contract=execution_config["contract"],
         trade_type=execution_config["trade_type"],
@@ -800,13 +873,26 @@ async def handle_ws_message(websocket: WebSocket, user_id: int, account_id: int,
         follow_signal_direction = bool(data.get("follow_signal_direction", True))
         trade_type = (data.get("trade_type") or "RISE_FALL").upper()
         contract = (data.get("contract") or "RISE").upper()
+        try:
+            duration_value, duration_unit, normalized_duration_seconds = _normalize_bot_duration(trade_type, data)
+        except ValueError as exc:
+            await _send_bot_status(
+                connection_id,
+                {
+                    "state": "stopped",
+                    "reason": str(exc),
+                },
+            )
+            return
         direction = None if follow_signal_direction else _resolve_direction_from_trade_config(trade_type, contract)
         bot_state = {
             "enabled": True,
             "symbol": symbol,
             "interval": interval,
             "stake": float(data.get("stake") or 0),
-            "duration_seconds": int(data.get("duration_seconds") or 60),
+            "duration_seconds": normalized_duration_seconds,
+            "duration": duration_value,
+            "duration_unit": duration_unit,
             "trade_type": trade_type,
             "contract": contract,
             "direction": direction,
@@ -879,6 +965,8 @@ async def handle_ws_message(websocket: WebSocket, user_id: int, account_id: int,
                 "trade_type": trade_type,
                 "contract": contract,
                 "follow_signal_direction": follow_signal_direction,
+                "duration": duration_value,
+                "duration_unit": duration_unit,
             },
         )
 

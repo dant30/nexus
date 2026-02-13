@@ -26,7 +26,17 @@ const resolveDurationSeconds = (durationValue, durationUnit) => {
   if (durationUnit === "ticks") return value;
   if (durationUnit === "seconds") return value;
   if (durationUnit === "minutes") return value * 60;
-  return value * 3600;
+  if (durationUnit === "hours") return value * 3600;
+  return value * 86400;
+};
+
+const toDerivDurationUnit = (durationUnit) => {
+  if (durationUnit === "ticks") return "t";
+  if (durationUnit === "seconds") return "s";
+  if (durationUnit === "minutes") return "m";
+  if (durationUnit === "hours") return "h";
+  if (durationUnit === "days") return "d";
+  return "t";
 };
 
 export function AutoTrading() {
@@ -61,6 +71,13 @@ export function AutoTrading() {
       setContract("RISE");
     }
   }, [tradeType, contract]);
+
+  useEffect(() => {
+    if (tradeType === "CALL_PUT" && ["ticks", "seconds"].includes(durationUnit)) {
+      setDurationUnit("minutes");
+      setDurationValue(1);
+    }
+  }, [tradeType, durationUnit]);
 
   useEffect(() => {
     const off = onMessage("bot_status", (payload, message) => {
@@ -124,6 +141,8 @@ export function AutoTrading() {
         symbol: market,
         interval: timeframeSeconds,
         stake: Number(stake),
+        duration: Math.max(1, Math.floor(toNumber(durationValue, 1))),
+        duration_unit: toDerivDurationUnit(durationUnit),
         duration_seconds: durationSeconds,
         follow_signal_direction: false,
         trade_type: tradeType,
@@ -165,10 +184,11 @@ export function AutoTrading() {
             <div>
               <label className="mb-1 block text-xs font-semibold text-white/70">Unit</label>
               <Select value={durationUnit} onChange={(event) => setDurationUnit(event.target.value)}>
-                <option value="ticks">Ticks</option>
-                <option value="seconds">Seconds</option>
+                {tradeType === "RISE_FALL" ? <option value="ticks">Ticks</option> : null}
+                {tradeType === "RISE_FALL" ? <option value="seconds">Seconds</option> : null}
                 <option value="minutes">Minutes</option>
                 <option value="hours">Hours</option>
+                <option value="days">Days</option>
               </Select>
             </div>
           </div>

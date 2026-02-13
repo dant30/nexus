@@ -30,6 +30,80 @@ router = APIRouter(tags=["Trades"])
 def _next_req_id() -> int:
     return int(time.time() * 1000)
 
+
+def _normalize_deriv_duration(
+    trade_type: Optional[str],
+    duration: Optional[int] = None,
+    duration_unit: Optional[str] = None,
+    duration_seconds: Optional[int] = None,
+) -> tuple[int, str]:
+    """
+    Normalize and validate Deriv duration rules.
+    Returns (duration_value, deriv_unit_code).
+    """
+    trade_type_norm = (trade_type or "RISE_FALL").upper()
+    unit_aliases = {
+        "tick": "t",
+        "ticks": "t",
+        "t": "t",
+        "second": "s",
+        "seconds": "s",
+        "s": "s",
+        "minute": "m",
+        "minutes": "m",
+        "m": "m",
+        "hour": "h",
+        "hours": "h",
+        "h": "h",
+        "day": "d",
+        "days": "d",
+        "d": "d",
+    }
+    allowed_units = {"RISE_FALL": {"t", "s", "m", "h", "d"}, "CALL_PUT": {"m", "h", "d"}}
+    min_by_unit = {"t": 1, "s": 15, "m": 1, "h": 1, "d": 1}
+
+    normalized_unit = unit_aliases.get(str(duration_unit).lower()) if duration_unit is not None else None
+
+    if duration is None and duration_seconds is None:
+        duration = 1
+    if duration is None:
+        # Backward-compatible fallback for legacy payloads that only send seconds.
+        sec = max(1, int(duration_seconds or 1))
+        if trade_type_norm == "CALL_PUT":
+            # CALL/PUT does not support ticks/seconds.
+            normalized_unit = normalized_unit or "m"
+            duration = max(1, int((sec + 59) // 60))
+        else:
+            # RISE/FALL supports ticks; short durations are interpreted as ticks.
+            if normalized_unit is None:
+                if sec < 15:
+                    normalized_unit = "t"
+                    duration = sec
+                else:
+                    normalized_unit = "s"
+                    duration = sec
+            else:
+                duration = sec
+    else:
+        duration = max(1, int(duration))
+        if normalized_unit is None:
+            normalized_unit = "t" if trade_type_norm == "RISE_FALL" else "m"
+
+    if trade_type_norm not in allowed_units:
+        trade_type_norm = "RISE_FALL"
+    if normalized_unit not in allowed_units[trade_type_norm]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported duration unit '{normalized_unit}' for {trade_type_norm}",
+        )
+    if duration < min_by_unit[normalized_unit]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Duration too short for unit '{normalized_unit}'. Minimum is {min_by_unit[normalized_unit]}",
+        )
+
+    return duration, normalized_unit
+
 # ============================================================================
 # Enums & Models
 # ============================================================================
@@ -209,6 +283,8 @@ async def _execute_trade_internal(
     contract_type=None,
     contract=None,
     trade_type=None,
+    duration=None,
+    duration_unit=None,
 ):
     """
     Internal trade execution:
@@ -226,6 +302,15 @@ async def _execute_trade_internal(
         symbol=symbol,
         direction=direction,
         stake=str(stake),
+        duration_seconds=duration_seconds,
+        duration=duration,
+        duration_unit=duration_unit,
+    )
+
+    normalized_duration, normalized_unit = _normalize_deriv_duration(
+        trade_type=trade_type,
+        duration=duration,
+        duration_unit=duration_unit,
         duration_seconds=duration_seconds,
     )
 
@@ -263,8 +348,8 @@ async def _execute_trade_internal(
             symbol=symbol,
             contract_type=contract_type or ("CALL" if direction == "RISE" else "PUT"),
             amount=Decimal(stake),
-            duration=duration_seconds,
-            duration_unit="s",
+            duration=normalized_duration,
+            duration_unit=normalized_unit,
             currency=getattr(account, "currency", "USD"),
             req_id=req_id,
         )
