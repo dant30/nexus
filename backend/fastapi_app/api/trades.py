@@ -21,7 +21,6 @@ from django_core.accounts.selectors import get_default_account
 from fastapi_app.deps import get_current_user, CurrentUser
 from fastapi_app.deriv_ws.connection_pool import pool
 from shared.utils.logger import log_info, log_error, get_logger
-from shared.utils.ids import generate_proposal_id
 
 logger = get_logger("trades")
 User = get_user_model()
@@ -250,7 +249,7 @@ async def _execute_trade_internal(
         return trade
 
     # Request proposal with a req_id for correlation
-    req_id = generate_proposal_id()
+    req_id = _next_req_id()
     proposal = None
     
     try:
@@ -273,14 +272,14 @@ async def _execute_trade_internal(
         # Wait for proposal event with retry
         proposal = await deriv_client.wait_for_event(
             "proposal",
-            lambda ev: ev.get("id") == req_id or ev.get("req_id") == req_id,
+            lambda ev: ev.get("req_id") == req_id,
             timeout=5
         )
     except Exception as exc:
         log_error("Proposal request failed", exception=exc, req_id=req_id)
         proposal = None
 
-    if not proposal:
+    if not proposal or proposal.get("event") != "proposal":
         log_error("No proposal received from Deriv", req_id=req_id)
         trade = await sync_to_async(create_trade)(
             user=user,
@@ -304,6 +303,14 @@ async def _execute_trade_internal(
     try:
         proposal_id = proposal.get("id") or proposal.get("proposal_id")
         ask_price = proposal.get("ask_price") or proposal.get("ask")
+        if proposal_id is None or ask_price is None:
+            log_error(
+                "Invalid proposal payload from Deriv",
+                req_id=req_id,
+                proposal=proposal,
+            )
+            buy_ok = False
+            raise ValueError("Missing proposal_id or ask_price in proposal response")
         
         log_info(
             "Sending Deriv buy request",
@@ -317,11 +324,11 @@ async def _execute_trade_internal(
         # Wait for buy confirmation
         buy_evt = await deriv_client.wait_for_event(
             "buy",
-            lambda ev: ev.get("proposal_id") == proposal_id or ev.get("req_id") == req_id,
+            lambda ev: ev.get("req_id") == req_id or ev.get("proposal_id") == proposal_id,
             timeout=5
         )
         
-        if buy_evt:
+        if buy_evt and buy_evt.get("event") == "buy":
             transaction_id = buy_evt.get("transaction_id") or buy_evt.get("buy_id") or buy_evt.get("id")
             buy_ok = True
             log_info(

@@ -398,6 +398,7 @@ class DerivSerializer:
             return {
                 "event": "proposal",
                 "id": proposal.get("id"),
+                "req_id": data.get("req_id"),
                 "symbol": proposal.get("symbol"),
                 "payout": Decimal(str(proposal.get("payout", 0))),
                 "stake": Decimal(str(proposal.get("stake", 0))),
@@ -422,6 +423,8 @@ class DerivSerializer:
                 "contract_id": buy.get("contract_id"),
                 "transaction_id": buy.get("transaction_id"),
                 "buy_price": buy.get("buy_price"),
+                "proposal_id": buy.get("buy"),
+                "req_id": data.get("req_id"),
                 "raw": data,
             }
         except Exception as e:
