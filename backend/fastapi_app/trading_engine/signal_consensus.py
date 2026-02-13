@@ -8,7 +8,7 @@ from enum import Enum
 from datetime import datetime
 from dataclasses import dataclass
 
-from fastapi_app.trading_engine.strategies import StrategySignal, Signal
+from fastapi_app.trading_engine.strategies import StrategySignal, Signal, resolve_signal_contracts
 from shared.utils.logger import log_info, get_logger
 
 logger = get_logger("consensus")
@@ -36,6 +36,9 @@ class ConsensusSignal:
     reason: str
     timestamp: str
     strategy_signals: List[Dict]
+    direction: Optional[str]
+    rise_fall_contract: Optional[str]
+    call_put_contract: Optional[str]
 
 
 class SignalConsensus:
@@ -85,6 +88,9 @@ class SignalConsensus:
                 reason="No signals provided",
                 timestamp=datetime.utcnow().isoformat(),
                 strategy_signals=[],
+                direction=None,
+                rise_fall_contract=None,
+                call_put_contract=None,
             )
         
         # Count votes
@@ -97,11 +103,17 @@ class SignalConsensus:
         strategy_signals = []
 
         for signal in signals:
+            contracts = resolve_signal_contracts(signal.signal)
             strategy_signals.append({
                 "strategy": getattr(signal, "strategy", "Unknown"),
                 "signal": signal.signal.value,
                 "confidence": signal.confidence,
                 "reason": signal.reason,
+                "direction": contracts["direction"],
+                "contracts": {
+                    "rise_fall": contracts["rise_fall_contract"],
+                    "call_put": contracts["call_put_contract"],
+                },
             })
 
             if signal.signal == Signal.RISE:
@@ -166,6 +178,8 @@ class SignalConsensus:
             total_strategies=len(signals),
         )
 
+        consensus_contracts = resolve_signal_contracts(decision.value)
+
         return ConsensusSignal(
             decision=decision,
             confidence=float(round(confidence, 4)),
@@ -175,4 +189,7 @@ class SignalConsensus:
             reason=reason,
             timestamp=datetime.utcnow().isoformat(),
             strategy_signals=strategy_signals,
+            direction=consensus_contracts["direction"],
+            rise_fall_contract=consensus_contracts["rise_fall_contract"],
+            call_put_contract=consensus_contracts["call_put_contract"],
         )

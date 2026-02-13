@@ -329,13 +329,15 @@ async def _signal_from_engine(symbol: str, ticks: list, candles: list, interval:
     if not result.get("success"):
         return None
     consensus = result.get("consensus", {})
-    decision = consensus.get("decision", "NEUTRAL")
-    if "RISE" in decision:
-        direction = "RISE"
-    elif "FALL" in decision:
-        direction = "FALL"
-    else:
-        direction = "NEUTRAL"
+    direction = consensus.get("direction")
+    if direction not in {"RISE", "FALL"}:
+        decision = consensus.get("decision", "NEUTRAL")
+        if "RISE" in decision:
+            direction = "RISE"
+        elif "FALL" in decision:
+            direction = "FALL"
+        else:
+            direction = "NEUTRAL"
     minutes = max(1, int(interval / 60))
     return {
         "id": f"sig-{symbol}-{int(time.time())}",
@@ -355,6 +357,32 @@ def _resolve_direction_from_trade_config(trade_type: str, contract: str):
     if trade_type == "CALL_PUT" and contract in {"CALL", "PUT"}:
         return "RISE" if contract == "CALL" else "FALL"
     return None
+
+
+def _resolve_trade_execution_from_bot_config(bot_state: dict, decision: str):
+    trade_type = (bot_state.get("trade_type") or "RISE_FALL").upper()
+    configured_contract = (bot_state.get("contract") or "RISE").upper()
+    follow_signal_direction = bool(bot_state.get("follow_signal_direction", True))
+
+    if follow_signal_direction:
+        direction = decision
+        if trade_type == "CALL_PUT":
+            contract = "CALL" if direction == "RISE" else "PUT"
+        else:
+            contract = direction
+    else:
+        contract = configured_contract
+        direction = _resolve_direction_from_trade_config(trade_type, contract)
+        if direction not in {"RISE", "FALL"}:
+            return None
+
+    contract_type = "CALL" if direction == "RISE" else "PUT"
+    return {
+        "direction": direction,
+        "trade_type": trade_type,
+        "contract": contract,
+        "contract_type": contract_type,
+    }
 
 
 def _extract_signal_decision(signal: dict, strategy: str):
@@ -518,9 +546,15 @@ async def _maybe_execute_bot_trade(
 
     from fastapi_app.api.trades import _execute_trade_internal
 
-    execution_contract_type = "CALL" if decision == "RISE" else "PUT"
-    execution_trade_type = "RISE_FALL"
-    execution_contract = decision
+    execution_config = _resolve_trade_execution_from_bot_config(bot_state, decision)
+    if not execution_config:
+        log_error(
+            "Bot skipped trade: invalid trade_type/contract configuration",
+            connection_id=connection_id,
+            trade_type=bot_state.get("trade_type"),
+            contract=bot_state.get("contract"),
+        )
+        return
 
     log_info(
         "Bot executing trade",
@@ -528,10 +562,13 @@ async def _maybe_execute_bot_trade(
         account_id=account_id,
         symbol=bot_state.get("symbol"),
         decision=decision,
+        execution_direction=execution_config["direction"],
+        execution_trade_type=execution_config["trade_type"],
+        execution_contract=execution_config["contract"],
         confidence=confidence,
         stake=bot_state.get("stake"),
         duration_seconds=bot_state.get("duration_seconds"),
-        contract_type=execution_contract_type,
+        contract_type=execution_config["contract_type"],
     )
 
     user = await sync_to_async(User.objects.get)(id=user_id)
@@ -540,12 +577,12 @@ async def _maybe_execute_bot_trade(
         user=user,
         account=account,
         symbol=bot_state.get("symbol"),
-        direction=decision,
+        direction=execution_config["direction"],
         stake=Decimal(str(bot_state.get("stake"))),
         duration_seconds=int(bot_state.get("duration_seconds", 60)),
-        contract_type=execution_contract_type,
-        contract=execution_contract,
-        trade_type=execution_trade_type,
+        contract_type=execution_config["contract_type"],
+        contract=execution_config["contract"],
+        trade_type=execution_config["trade_type"],
     )
 
     # Only update bot state if trade was successfully created
@@ -565,6 +602,8 @@ async def _maybe_execute_bot_trade(
                 "cooldown_until": bot_state.get("cooldown_until"),
                 "confidence": confidence,
                 "symbol": bot_state.get("symbol"),
+                "trade_type": execution_config["trade_type"],
+                "contract": execution_config["contract"],
             },
         )
     else:
@@ -790,6 +829,15 @@ async def handle_ws_message(websocket: WebSocket, user_id: int, account_id: int,
                 },
             )
             return
+        if not follow_signal_direction and direction not in {"RISE", "FALL"}:
+            await _send_bot_status(
+                connection_id,
+                {
+                    "state": "stopped",
+                    "reason": "Invalid trade type/contract combination.",
+                },
+            )
+            return
         if symbol not in DERIV_SYMBOLS:
             await _send_bot_status(
                 connection_id,
@@ -828,6 +876,9 @@ async def handle_ws_message(websocket: WebSocket, user_id: int, account_id: int,
                 "symbol": symbol,
                 "session_trades": 0,
                 "cooldown_until": 0,
+                "trade_type": trade_type,
+                "contract": contract,
+                "follow_signal_direction": follow_signal_direction,
             },
         )
 

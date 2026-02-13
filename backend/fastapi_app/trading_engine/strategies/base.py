@@ -21,6 +21,30 @@ class Signal(str, Enum):
     NEUTRAL = "NEUTRAL"
 
 
+def resolve_signal_contracts(signal: "Signal | str") -> Dict[str, Optional[str]]:
+    """
+    Map a directional strategy signal to both supported contract families.
+    """
+    signal_value = signal.value if isinstance(signal, Signal) else str(signal).upper()
+    if signal_value == Signal.RISE.value:
+        return {
+            "direction": "RISE",
+            "rise_fall_contract": "RISE",
+            "call_put_contract": "CALL",
+        }
+    if signal_value == Signal.FALL.value:
+        return {
+            "direction": "FALL",
+            "rise_fall_contract": "FALL",
+            "call_put_contract": "PUT",
+        }
+    return {
+        "direction": None,
+        "rise_fall_contract": None,
+        "call_put_contract": None,
+    }
+
+
 @dataclass
 class StrategySignal:
     """Strategy signal output."""

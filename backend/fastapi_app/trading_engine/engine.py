@@ -116,6 +116,11 @@ class TradingEngine:
                     "rise_votes": consensus_signal.rise_votes,
                     "fall_votes": consensus_signal.fall_votes,
                     "hold_votes": consensus_signal.hold_votes,
+                    "direction": consensus_signal.direction,
+                    "contracts": {
+                        "rise_fall": consensus_signal.rise_fall_contract,
+                        "call_put": consensus_signal.call_put_contract,
+                    },
                 },
                 "strategies": consensus_signal.strategy_signals,
                 "timestamp": consensus_signal.timestamp,

@@ -43,12 +43,24 @@ export function AutoTrading() {
   const [cooldownSeconds, setCooldownSeconds] = useState(10);
   const [maxTradesPerSession, setMaxTradesPerSession] = useState(5);
   const [minConfidence, setMinConfidence] = useState(TRADING.MIN_SIGNAL_CONFIDENCE);
+  const [tradeType, setTradeType] = useState("RISE_FALL");
+  const [contract, setContract] = useState("RISE");
   const [sessionTrades, setSessionTrades] = useState(0);
   const [cooldownUntil, setCooldownUntil] = useState(0);
   const [loading, setLoading] = useState(false);
 
   const { signals } = useSignals();
   useMarketData(market, timeframeSeconds);
+
+  useEffect(() => {
+    if (tradeType === "CALL_PUT" && !["CALL", "PUT"].includes(contract)) {
+      setContract("CALL");
+      return;
+    }
+    if (tradeType === "RISE_FALL" && !["RISE", "FALL"].includes(contract)) {
+      setContract("RISE");
+    }
+  }, [tradeType, contract]);
 
   useEffect(() => {
     const off = onMessage("bot_status", (payload, message) => {
@@ -113,7 +125,9 @@ export function AutoTrading() {
         interval: timeframeSeconds,
         stake: Number(stake),
         duration_seconds: durationSeconds,
-        follow_signal_direction: true,
+        follow_signal_direction: false,
+        trade_type: tradeType,
+        contract,
         strategy,
         min_confidence: normalizedMinConfidence,
         cooldown_seconds: normalizedCooldownSeconds,
@@ -122,7 +136,7 @@ export function AutoTrading() {
       });
       setRunning(true);
       setLastEvent({
-        message: `Bot started on ${market} (auto-follow signal direction).`,
+        message: `Bot started on ${market} (${tradeType} / ${contract}).`,
         timestamp: Date.now(),
       });
     } finally {
@@ -171,6 +185,31 @@ export function AutoTrading() {
           </div>
           <StakeSettings value={stake} onChange={setStake} />
           <RiskLimits value={dailyLimit} onChange={setDailyLimit} />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-white/70">Trade Type</label>
+              <Select value={tradeType} onChange={(event) => setTradeType(event.target.value)}>
+                <option value="RISE_FALL">Rise/Fall</option>
+                <option value="CALL_PUT">Call/Put</option>
+              </Select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-white/70">Contract</label>
+              <Select value={contract} onChange={(event) => setContract(event.target.value)}>
+                {tradeType === "CALL_PUT" ? (
+                  <>
+                    <option value="CALL">Call</option>
+                    <option value="PUT">Put</option>
+                  </>
+                ) : (
+                  <>
+                    <option value="RISE">Rise</option>
+                    <option value="FALL">Fall</option>
+                  </>
+                )}
+              </Select>
+            </div>
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="mb-1 block text-xs font-semibold text-white/70">
@@ -224,6 +263,9 @@ export function AutoTrading() {
               Session trades: {sessionTrades} / {normalizedMaxTradesPerSession}
             </p>
             <p>Cooldown remaining: {cooldownRemainingSeconds}s</p>
+            <p>
+              Contract mode: {tradeType === "CALL_PUT" ? "Call/Put" : "Rise/Fall"} / {contract}
+            </p>
           </div>
 
           <TradeButton
