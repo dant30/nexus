@@ -553,15 +553,25 @@ async def _execute_trade_internal(
                 open_contract = DerivSerializer.deserialize_open_contract(open_contract_response or {})
 
                 if open_contract and open_contract.get("is_sold"):
-                    payout_value = (
-                        open_contract.get("payout")
-                        if open_contract.get("payout") is not None
-                        else open_contract.get("sell_price")
-                    )
-                    if payout_value is not None:
+                    profit_value = open_contract.get("profit")
+                    sell_price_value = open_contract.get("sell_price")
+                    payout_value = open_contract.get("payout")
+                    settlement_payout = None
+
+                    # Prefer realized values (profit/sell_price). "payout" can be static contract payout.
+                    if profit_value is not None:
+                        settlement_payout = Decimal(str(trade.stake)) + Decimal(str(profit_value))
+                    elif sell_price_value is not None:
+                        settlement_payout = Decimal(str(sell_price_value))
+                    elif payout_value is not None:
+                        settlement_payout = Decimal(str(payout_value))
+
+                    if settlement_payout is not None:
+                        if settlement_payout < Decimal("0"):
+                            settlement_payout = Decimal("0")
                         await sync_to_async(close_trade)(
                             trade,
-                            Decimal(str(payout_value)),
+                            settlement_payout,
                             str(transaction_id),
                         )
                         await sync_to_async(trade.refresh_from_db)()
@@ -572,6 +582,9 @@ async def _execute_trade_internal(
                             status=trade.status,
                             payout=str(trade.payout) if trade.payout is not None else None,
                             profit=str(trade.profit) if trade.profit is not None else None,
+                            source_profit=profit_value,
+                            source_sell_price=sell_price_value,
+                            source_payout=payout_value,
                         )
                         settled = True
                         break

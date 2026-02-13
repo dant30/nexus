@@ -382,17 +382,25 @@ class DerivSerializer:
                 return None
             
             contract = data["proposal_open_contract"]
+            def _to_float_or_none(value: Any) -> Optional[float]:
+                if value is None:
+                    return None
+                try:
+                    return float(value)
+                except (TypeError, ValueError):
+                    return None
+
             return {
                 "event": "proposal_open_contract",
                 "contract_id": contract.get("contract_id"),
                 "is_sold": contract.get("is_sold", False),
                 "status": contract.get("status"),
-                "profit": float(contract.get("profit", 0)) if contract.get("profit") else None,
-                "payout": float(contract.get("payout", 0)) if contract.get("payout") else None,
-                "buy_price": float(contract.get("buy_price", 0)),
-                "sell_price": float(contract.get("sell_price", 0)) if contract.get("sell_price") else None,
-                "entry_tick": float(contract.get("entry_tick", 0)) if contract.get("entry_tick") else None,
-                "exit_tick": float(contract.get("exit_tick", 0)) if contract.get("exit_tick") else None,
+                "profit": _to_float_or_none(contract.get("profit")),
+                "payout": _to_float_or_none(contract.get("payout")),
+                "buy_price": _to_float_or_none(contract.get("buy_price")),
+                "sell_price": _to_float_or_none(contract.get("sell_price")),
+                "entry_tick": _to_float_or_none(contract.get("entry_tick")),
+                "exit_tick": _to_float_or_none(contract.get("exit_tick")),
                 "raw": data,
             }
         
