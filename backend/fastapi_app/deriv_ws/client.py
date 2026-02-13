@@ -187,7 +187,7 @@ class DerivWebSocketClient:
         if self.status != WebSocketStatus.AUTHORIZED:
             if retry_on_failure:
                 await self.message_queue.put(data)
-                log_debug("Message queued (not authorized)", user_id=self.user_id)
+                log_info("Message queued (not authorized)", user_id=self.user_id)
                 return True
             return False
         
@@ -234,8 +234,10 @@ class DerivWebSocketClient:
         Returns:
             Response data or None on timeout/error
         """
-        req_id = self._next_req_id()
-        data["req_id"] = req_id
+        req_id = data.get("req_id")
+        if req_id is None:
+            req_id = self._next_req_id()
+            data["req_id"] = req_id
         
         future = asyncio.get_event_loop().create_future()
         self.pending_requests[req_id] = future
@@ -446,6 +448,8 @@ class DerivWebSocketClient:
                     
                     # Handle response correlation
                     req_id = data.get("req_id")
+                    if isinstance(req_id, str) and req_id.isdigit():
+                        req_id = int(req_id)
                     if req_id and req_id in self.pending_requests:
                         future = self.pending_requests.pop(req_id)
                         if not future.done():

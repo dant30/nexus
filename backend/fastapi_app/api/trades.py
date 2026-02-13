@@ -20,6 +20,7 @@ from django_core.trades.selectors import get_user_trades, get_open_trades
 from django_core.accounts.selectors import get_default_account
 from fastapi_app.deps import get_current_user, CurrentUser
 from fastapi_app.deriv_ws.connection_pool import pool
+from fastapi_app.deriv_ws.serializers import DerivSerializer
 from shared.utils.logger import log_info, log_error, get_logger
 
 logger = get_logger("trades")
@@ -351,7 +352,7 @@ async def _execute_trade_internal(
             contract_type=contract_type or ("CALL" if direction == "RISE" else "PUT"),
             req_id=req_id,
         )
-        await deriv_client.request_proposal(
+        proposal_response = await deriv_client.request_proposal(
             symbol=symbol,
             contract_type=contract_type or ("CALL" if direction == "RISE" else "PUT"),
             amount=Decimal(stake),
@@ -360,13 +361,7 @@ async def _execute_trade_internal(
             currency=getattr(account, "currency", "USD"),
             req_id=req_id,
         )
-        
-        # Wait for proposal event with retry
-        proposal = await deriv_client.wait_for_event(
-            "proposal",
-            lambda ev: ev.get("req_id") == req_id,
-            timeout=5
-        )
+        proposal = DerivSerializer.deserialize_proposal(proposal_response or {})
     except Exception as exc:
         log_error("Proposal request failed", exception=exc, req_id=req_id)
         proposal = None
@@ -412,14 +407,8 @@ async def _execute_trade_internal(
             req_id=req_id,
         )
         
-        await deriv_client.buy_contract(proposal_id, float(ask_price), req_id=req_id)
-        
-        # Wait for buy confirmation
-        buy_evt = await deriv_client.wait_for_event(
-            "buy",
-            lambda ev: ev.get("req_id") == req_id or ev.get("proposal_id") == proposal_id,
-            timeout=5
-        )
+        buy_response = await deriv_client.buy_contract(proposal_id, float(ask_price), req_id=req_id)
+        buy_evt = DerivSerializer.deserialize_buy(buy_response or {})
         
         if buy_evt and buy_evt.get("event") == "buy":
             transaction_id = buy_evt.get("transaction_id") or buy_evt.get("buy_id") or buy_evt.get("id")
