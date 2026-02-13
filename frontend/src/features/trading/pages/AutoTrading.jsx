@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { BotStatus } from "../components/BotControls/BotStatus.jsx";
-import { StrategySelector } from "../components/BotControls/StrategySelector.jsx";
 import { StakeSettings } from "../components/BotControls/StakeSettings.jsx";
 import { RiskLimits } from "../components/BotControls/RiskLimits.jsx";
 import { TradeButton } from "../components/TradePanel/TradeButton.jsx";
@@ -40,7 +39,7 @@ const toDerivDurationUnit = (durationUnit) => {
 };
 
 export function AutoTrading() {
-  const { running, setRunning, strategy, setStrategy, setLastEvent } = useBotContext();
+  const { running, setRunning, setLastEvent } = useBotContext();
   const { timeframeSeconds, setTimeframeSeconds } = useTradingContext();
   const { activeAccount } = useAccountContext();
   const { sendMessage, connected, onMessage } = useWebSocket();
@@ -54,23 +53,14 @@ export function AutoTrading() {
   const [maxTradesPerSession, setMaxTradesPerSession] = useState(5);
   const [minConfidence, setMinConfidence] = useState(TRADING.MIN_SIGNAL_CONFIDENCE);
   const [tradeType, setTradeType] = useState("RISE_FALL");
-  const [contract, setContract] = useState("RISE");
   const [sessionTrades, setSessionTrades] = useState(0);
   const [cooldownUntil, setCooldownUntil] = useState(0);
+  const [recoveryLevel, setRecoveryLevel] = useState(0);
+  const [consecutiveLosses, setConsecutiveLosses] = useState(0);
   const [loading, setLoading] = useState(false);
 
   const { signals } = useSignals();
   useMarketData(market, timeframeSeconds);
-
-  useEffect(() => {
-    if (tradeType === "CALL_PUT" && !["CALL", "PUT"].includes(contract)) {
-      setContract("CALL");
-      return;
-    }
-    if (tradeType === "RISE_FALL" && !["RISE", "FALL"].includes(contract)) {
-      setContract("RISE");
-    }
-  }, [tradeType, contract]);
 
   useEffect(() => {
     if (tradeType === "CALL_PUT" && ["ticks", "seconds"].includes(durationUnit)) {
@@ -89,6 +79,12 @@ export function AutoTrading() {
       }
       if (typeof status.cooldown_until === "number") {
         setCooldownUntil(status.cooldown_until * 1000);
+      }
+      if (typeof status.recovery_level === "number") {
+        setRecoveryLevel(status.recovery_level);
+      }
+      if (typeof status.consecutive_losses === "number") {
+        setConsecutiveLosses(status.consecutive_losses);
       }
       if (status.state === "stopped") {
         setRunning(false);
@@ -144,10 +140,8 @@ export function AutoTrading() {
         duration: Math.max(1, Math.floor(toNumber(durationValue, 1))),
         duration_unit: toDerivDurationUnit(durationUnit),
         duration_seconds: durationSeconds,
-        follow_signal_direction: false,
+        follow_signal_direction: true,
         trade_type: tradeType,
-        contract,
-        strategy,
         min_confidence: normalizedMinConfidence,
         cooldown_seconds: normalizedCooldownSeconds,
         max_trades_per_session: normalizedMaxTradesPerSession,
@@ -155,7 +149,7 @@ export function AutoTrading() {
       });
       setRunning(true);
       setLastEvent({
-        message: `Bot started on ${market} (${tradeType} / ${contract}).`,
+        message: `Bot started on ${market} (${tradeType}, follow signal direction).`,
         timestamp: Date.now(),
       });
     } finally {
@@ -169,7 +163,6 @@ export function AutoTrading() {
         <Card className="space-y-4">
           <div className="text-sm font-semibold text-white/80">Auto Trading</div>
           <MarketSelector value={market} onChange={setMarket} />
-          <StrategySelector value={strategy} onChange={setStrategy} />
           <div className="grid grid-cols-[2fr_1fr] gap-3">
             <div>
               <label className="mb-1 block text-xs font-semibold text-white/70">Duration</label>
@@ -205,30 +198,12 @@ export function AutoTrading() {
           </div>
           <StakeSettings value={stake} onChange={setStake} />
           <RiskLimits value={dailyLimit} onChange={setDailyLimit} />
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="mb-1 block text-xs font-semibold text-white/70">Trade Type</label>
-              <Select value={tradeType} onChange={(event) => setTradeType(event.target.value)}>
-                <option value="RISE_FALL">Rise/Fall</option>
-                <option value="CALL_PUT">Call/Put</option>
-              </Select>
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-semibold text-white/70">Contract</label>
-              <Select value={contract} onChange={(event) => setContract(event.target.value)}>
-                {tradeType === "CALL_PUT" ? (
-                  <>
-                    <option value="CALL">Call</option>
-                    <option value="PUT">Put</option>
-                  </>
-                ) : (
-                  <>
-                    <option value="RISE">Rise</option>
-                    <option value="FALL">Fall</option>
-                  </>
-                )}
-              </Select>
-            </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-white/70">Trade Type</label>
+            <Select value={tradeType} onChange={(event) => setTradeType(event.target.value)}>
+              <option value="RISE_FALL">Rise/Fall</option>
+              <option value="CALL_PUT">Call/Put</option>
+            </Select>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -283,9 +258,8 @@ export function AutoTrading() {
               Session trades: {sessionTrades} / {normalizedMaxTradesPerSession}
             </p>
             <p>Cooldown remaining: {cooldownRemainingSeconds}s</p>
-            <p>
-              Contract mode: {tradeType === "CALL_PUT" ? "Call/Put" : "Rise/Fall"} / {contract}
-            </p>
+            <p>Direction mode: Follow signal direction</p>
+            <p>Contract mode: {tradeType === "CALL_PUT" ? "Call/Put" : "Rise/Fall"}</p>
           </div>
 
           <TradeButton
@@ -296,7 +270,12 @@ export function AutoTrading() {
             {running ? "Stop Bot" : "Start Bot"}
           </TradeButton>
         </Card>
-        <BotStatus />
+        <BotStatus
+          followSignalDirection={true}
+          recoveryLevel={recoveryLevel}
+          consecutiveLosses={consecutiveLosses}
+          baseStake={Number(stake)}
+        />
       </div>
     </div>
   );
