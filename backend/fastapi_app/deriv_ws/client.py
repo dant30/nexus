@@ -293,8 +293,15 @@ class DerivWebSocketClient:
                     if predicate is None or predicate(evt_data):
                         future.set_result(evt_data)
         
-        # Register temporary handler
-        self.event_handlers[f"_wait_{event_type}_{id(future)}"] = event_handler
+        # Register temporary handler on actual event key.
+        existing_handler = self.event_handlers.get(event_type)
+
+        async def composite_handler(data):
+            if existing_handler:
+                await existing_handler(data)
+            await event_handler(data)
+
+        self.event_handlers[event_type] = composite_handler
         
         try:
             # Wait for the event with timeout
@@ -304,9 +311,11 @@ class DerivWebSocketClient:
             log_warning(f"Timeout waiting for event: {event_type}", timeout=timeout)
             return None
         finally:
-            # Clean up temporary handler
-            self.event_helpers = getattr(self, "event_helpers", {})
-            self.event_handlers.pop(f"_wait_{event_type}_{id(future)}", None)
+            # Restore prior handler state.
+            if existing_handler:
+                self.event_handlers[event_type] = existing_handler
+            else:
+                self.event_handlers.pop(event_type, None)
 
     def _next_req_id(self) -> int:
         """

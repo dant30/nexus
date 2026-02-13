@@ -2,6 +2,7 @@
 Trade execution and history routes.
 """
 from typing import Optional, List
+import asyncio
 import time
 from decimal import Decimal
 from enum import Enum
@@ -528,29 +529,29 @@ async def _execute_trade_internal(
         signal_id=signal_id,  # NEW
     )
 
-    # Subscribe to open-contract lifecycle and reconcile local trade status.
-    # This prevents stale OPEN trades from blocking the bot indefinitely.
+    # Reconcile contract settlement with active polling.
+    # This avoids false FAILED status when subscription events are delayed/missed.
     if contract_id:
         try:
-            await deriv_client.subscribe_open_contract(int(contract_id))
-
-            # Compute a bounded wait window for contract settlement.
+            # Compute settlement timeout.
             unit_multipliers = {"t": 1, "s": 1, "m": 60, "h": 3600, "d": 86400}
             expected_seconds = int(normalized_duration) * unit_multipliers.get(normalized_unit, 1)
-            settlement_timeout = max(10, min(expected_seconds + 20, 180))
+            # For tick contracts, allow more time for propagation/settlement.
+            settlement_timeout = 120 if normalized_unit == "t" else max(30, min(expected_seconds + 30, 300))
 
-            event = await deriv_client.wait_for_event(
-                "proposal_open_contract",
-                predicate=lambda e: (
-                    isinstance(e, dict)
-                    and isinstance(e.get("proposal_open_contract"), dict)
-                    and e["proposal_open_contract"].get("contract_id") == int(contract_id)
-                ),
-                timeout=settlement_timeout,
-            )
+            deadline = time.time() + settlement_timeout
+            settled = False
 
-            if event:
-                open_contract = DerivSerializer.deserialize_open_contract(event)
+            while time.time() < deadline:
+                open_contract_response = await deriv_client.request(
+                    {
+                        "proposal_open_contract": 1,
+                        "contract_id": int(contract_id),
+                    },
+                    timeout=8,
+                )
+                open_contract = DerivSerializer.deserialize_open_contract(open_contract_response or {})
+
                 if open_contract and open_contract.get("is_sold"):
                     payout_value = (
                         open_contract.get("payout")
@@ -565,35 +566,28 @@ async def _execute_trade_internal(
                         )
                         await sync_to_async(trade.refresh_from_db)()
                         log_info(
-                            "Trade settled from open contract update",
+                            "Trade settled from contract polling",
                             trade_id=trade.id,
                             contract_id=contract_id,
                             status=trade.status,
                             payout=str(trade.payout) if trade.payout is not None else None,
                             profit=str(trade.profit) if trade.profit is not None else None,
                         )
-                    else:
-                        trade.status = Trade.STATUS_FAILED
-                        await sync_to_async(trade.save)()
-                        log_error(
-                            "Open contract update missing payout; marked trade failed",
-                            trade_id=trade.id,
-                            contract_id=contract_id,
-                        )
-            else:
-                trade.status = Trade.STATUS_FAILED
-                await sync_to_async(trade.save)()
+                        settled = True
+                        break
+
+                await asyncio.sleep(1)
+
+            if not settled:
                 log_warning(
-                    "No open contract settlement update; marked trade failed",
+                    "No contract settlement update yet; keeping trade OPEN",
                     trade_id=trade.id,
                     contract_id=contract_id,
                     timeout=settlement_timeout,
                 )
         except Exception as exc:
-            trade.status = Trade.STATUS_FAILED
-            await sync_to_async(trade.save)()
             log_error(
-                "Failed reconciling open contract; marked trade failed",
+                "Failed reconciling open contract; keeping trade OPEN",
                 trade_id=trade.id,
                 contract_id=contract_id,
                 exception=exc,
