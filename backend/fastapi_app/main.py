@@ -670,24 +670,6 @@ async def _maybe_execute_bot_trade(
             trade_key=trade_key,
         )
         return
-    
-    # Check if trade already exists for this signal
-    existing_trade = await sync_to_async(
-        lambda: Trade.objects.filter(
-            user_id=user_id,
-            account_id=account_id,
-            signal_id=signal_id,
-            status__in=[Trade.STATUS_OPEN, Trade.STATUS_WON, Trade.STATUS_LOST]
-        ).first()
-    )()
-    
-    if existing_trade:
-        log_info(
-            "Bot skipped trade: trade already exists for signal",
-            signal_id=signal_id,
-            trade_id=existing_trade.id,
-        )
-        return
 
     # Resolve execution configuration
     execution_config = _resolve_trade_execution_from_bot_config(bot_state, decision)

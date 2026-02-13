@@ -104,6 +104,7 @@ def _normalize_deriv_duration(
 
     return duration, normalized_unit
 
+
 # ============================================================================
 # Enums & Models
 # ============================================================================
@@ -155,6 +156,7 @@ class TradeResponse(BaseModel):
     updated_at: str
     trade_type: Optional[str] = None
     contract: Optional[str] = None
+    signal_id: Optional[str] = None  # NEW: Add signal_id to response
 
     class Config:
         from_attributes = True
@@ -170,6 +172,7 @@ class ExecuteTradeRequest(BaseModel):
     symbol: Optional[str] = None
     trade_type: Optional[TradeType] = None
     contract: Optional[str] = None
+    signal_id: Optional[str] = None  # NEW: Add signal_id to request
 
 
 class CreateTradeRequest(BaseModel):
@@ -184,6 +187,7 @@ class CreateTradeRequest(BaseModel):
     duration_seconds: Optional[int] = None
     duration_unit: Optional[str] = None
     symbol: Optional[str] = None
+    signal_id: Optional[str] = None  # NEW: Add signal_id
 
     def resolve_trade_contract(self):
         """
@@ -285,12 +289,13 @@ async def _execute_trade_internal(
     trade_type=None,
     duration=None,
     duration_unit=None,
+    signal_id=None,  # NEW: Add signal_id parameter
 ):
     """
     Internal trade execution:
     1. Request proposal from Deriv
     2. Buy contract if proposal acceptable
-    3. Create DB trade record AFTER Deriv confirms buy (NEW)
+    3. Create DB trade record AFTER Deriv confirms buy
     4. Update trade with proposal_id / transaction_id
     5. Broadcast WS trade_status to connected clients
     """
@@ -305,6 +310,7 @@ async def _execute_trade_internal(
         duration_seconds=duration_seconds,
         duration=duration,
         duration_unit=duration_unit,
+        signal_id=signal_id,  # NEW
     )
 
     normalized_duration, normalized_unit = _normalize_deriv_duration(
@@ -328,6 +334,7 @@ async def _execute_trade_internal(
             proposal_id=None,
             trade_type=trade_type or ("RISE_FALL" if direction in ("RISE", "FALL") else "CALL_PUT"),
             contract=contract or ("CALL" if direction == "RISE" else "PUT"),
+            signal_id=signal_id,  # NEW
         )
         trade.status = Trade.STATUS_FAILED
         await sync_to_async(trade.save)()
@@ -376,6 +383,7 @@ async def _execute_trade_internal(
             proposal_id=None,
             trade_type=trade_type or ("RISE_FALL" if direction in ("RISE", "FALL") else "CALL_PUT"),
             contract=contract or ("CALL" if direction == "RISE" else "PUT"),
+            signal_id=signal_id,  # NEW
         )
         trade.status = Trade.STATUS_FAILED
         await sync_to_async(trade.save)()
@@ -439,6 +447,7 @@ async def _execute_trade_internal(
             proposal_id=str(proposal.get("id") or proposal.get("proposal_id")),
             trade_type=trade_type or ("RISE_FALL" if direction in ("RISE", "FALL") else "CALL_PUT"),
             contract=contract or ("CALL" if direction == "RISE" else "PUT"),
+            signal_id=signal_id,  # NEW
         )
         trade.status = Trade.STATUS_FAILED
         await sync_to_async(trade.save)()
@@ -455,6 +464,7 @@ async def _execute_trade_internal(
         proposal_id=str(proposal.get("id") or proposal.get("proposal_id")),
         trade_type=trade_type or ("RISE_FALL" if direction in ("RISE", "FALL") else "CALL_PUT"),
         contract=contract or ("CALL" if direction == "RISE" else "PUT"),
+        signal_id=signal_id,  # NEW
     )
     
     # Set transaction_id
@@ -466,6 +476,7 @@ async def _execute_trade_internal(
         trade_id=trade.id,
         transaction_id=transaction_id,
         proposal_id=trade.proposal_id,
+        signal_id=signal_id,  # NEW
     )
 
     # Broadcast trade_status to connected WS clients
@@ -478,6 +489,7 @@ async def _execute_trade_internal(
             "transaction_id": trade.transaction_id,
             "stake": str(trade.stake),
             "payout": str(trade.payout) if trade.payout else None,
+            "signal_id": signal_id,  # NEW
         }
         
         for connection_id, websocket in list(app.state.ws_connections.items()):
@@ -522,6 +534,7 @@ async def list_trades(
                 updated_at=trade.updated_at.isoformat(),
                 trade_type=getattr(trade, 'trade_type', None) or ('RISE_FALL' if trade.direction in ('RISE', 'FALL') else 'CALL_PUT'),
                 contract=getattr(trade, 'contract', None) or (trade.direction if trade.direction in ('RISE', 'FALL') else trade.contract_type),
+                signal_id=getattr(trade, 'signal_id', None),  # NEW: Include signal_id
             )
             for trade in trades[offset:]
         ]
@@ -559,6 +572,7 @@ async def list_open_trades(current_user: CurrentUser = Depends(get_current_user)
                 updated_at=trade.updated_at.isoformat(),
                 trade_type=getattr(trade, 'trade_type', None) or ('RISE_FALL' if trade.direction in ('RISE', 'FALL') else 'CALL_PUT'),
                 contract=getattr(trade, 'contract', None) or (trade.direction if trade.direction in ('RISE', 'FALL') else trade.contract_type),
+                signal_id=getattr(trade, 'signal_id', None),  # NEW: Include signal_id
             )
             for trade in trades
         ]
@@ -599,6 +613,7 @@ async def get_trade(
             updated_at=trade.updated_at.isoformat(),
             trade_type=getattr(trade, 'trade_type', None) or ('RISE_FALL' if trade.direction in ('RISE', 'FALL') else 'CALL_PUT'),
             contract=getattr(trade, 'contract', None) or (trade.direction if trade.direction in ('RISE', 'FALL') else trade.contract_type),
+            signal_id=getattr(trade, 'signal_id', None),  # NEW: Include signal_id
         )
         
     except Trade.DoesNotExist:
@@ -654,6 +669,7 @@ async def close_trade_endpoint(
             created_at=trade.created_at.isoformat(),
             updated_at=trade.updated_at.isoformat(),
             contract=getattr(trade, 'contract', None) or (trade.direction if trade.direction in ('RISE', 'FALL') else trade.contract_type),
+            signal_id=getattr(trade, 'signal_id', None),  # NEW: Include signal_id
         )
         
     except Trade.DoesNotExist:
@@ -686,6 +702,7 @@ async def get_trade_profit(
             "profit": str(profit),
             "loss": str(loss),
             "roi": str((profit / trade.stake * 100)) if trade.stake > 0 else "0",
+            "signal_id": getattr(trade, 'signal_id', None),  # NEW: Include signal_id
         }
         
     except Trade.DoesNotExist:
@@ -693,4 +710,3 @@ async def get_trade_profit(
     except Exception as e:
         log_error("Failed to calculate profit", exception=e)
         raise HTTPException(status_code=500, detail="Calculation failed")
-
