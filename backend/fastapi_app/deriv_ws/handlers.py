@@ -1,146 +1,208 @@
 """
-Event handlers for Deriv WebSocket messages.
+Professional event handlers for Deriv WebSocket messages.
+Processes and transforms Deriv data for internal use.
 """
-from typing import Dict, Any, Callable, Optional
-import json
-from fastapi_app.deriv_ws.connection_pool import pool as connection_pool
+from typing import Dict, Any, Optional
 
 from .events import DerivEventType
 from .serializers import DerivSerializer
-from shared.utils.logger import log_info, log_error, get_logger
+from .connection_pool import pool
+from shared.utils.logger import log_info, log_error, log_warning, log_debug, get_logger
 
 logger = get_logger("deriv_handlers")
 
 
+def broadcast_balance_update(account_id: int, balance: float, currency: Optional[str] = None) -> None:
+    """Best-effort broadcast of balance updates to connected frontend WS clients."""
+    payload = {
+        "type": "balance_update",
+        "data": {
+            "account_id": account_id,
+            "balance": float(balance),
+            "currency": currency,
+        },
+    }
+    pool.broadcast(payload)
+    log_info("Broadcasted balance update", account_id=account_id, balance=float(balance), currency=currency)
+
+
+def broadcast_trade_update(update: Dict[str, Any]) -> None:
+    """Best-effort broadcast of trade/contract updates to connected frontend WS clients."""
+    payload = {
+        "type": "trade_update",
+        "data": update,
+    }
+    pool.broadcast(payload)
+    log_info("Broadcasted trade update", contract_id=update.get("contract_id"), status=update.get("status"))
+
+
 class DerivEventHandler:
     """
-    Handle Deriv WebSocket events.
+    Professional event handler for Deriv WebSocket messages.
+    
+    Responsibilities:
+    - Route messages to appropriate handlers
+    - Transform raw data to internal format
+    - Update subscription state
+    - Broadcast relevant updates
+    - Error recovery
     """
     
     def __init__(self):
-        """Initialize event handler."""
-        self.handlers: Dict[str, Callable] = {
+        self.handlers = {
             DerivEventType.TICK: self._handle_tick,
+            DerivEventType.CANDLE: self._handle_ohlc,
             DerivEventType.BALANCE: self._handle_balance,
             DerivEventType.PROPOSAL: self._handle_proposal,
-            DerivEventType.CANDLE: self._handle_ohlc,
             DerivEventType.BUY: self._handle_buy,
             DerivEventType.PROPOSAL_OPEN_CONTRACT: self._handle_open_contract,
             DerivEventType.AUTHORIZE: self._handle_authorize,
+            "candles": self._handle_candles_snapshot,  # Special case for snapshots
+            "error": self._handle_error,
         }
     
-    async def handle_message(self, message: Dict[str, Any]) -> Optional[Dict]:
+    async def handle(self, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """
-        Handle incoming WebSocket message from Deriv.
+        Main entry point - handle incoming Deriv message.
         
         Args:
-        - message: Raw message dict from Deriv
+            data: Raw message from Deriv
         
         Returns:
-        - Processed message or None
+            Processed message or None
         """
         try:
             # Determine message type
-            if "tick" in message:
-                return await self._handle_tick(message)
-            elif "ohlc" in message:
-                return await self._handle_ohlc(message)
-            elif "candles" in message:
-                return await self._handle_candles(message)
-            elif "authorize" in message:
-                return await self._handle_authorize(message)
-            elif "balance" in message:
-                return await self._handle_balance(message)
-            elif "proposal"in message:
-                return await self._handle_proposal(message)
-            elif "buy" in message:
-                return await self._handle_buy(message)
-            elif "proposal_open_contract" in message:
-                return await self._handle_open_contract(message)
-            elif "error" in message:
-                return await self._handle_error(message)
+            event_type = None
+            for key in data.keys():
+                if key in self.handlers:
+                    event_type = key
+                    break
+            
+            if event_type and event_type in self.handlers:
+                handler = self.handlers[event_type]
+                return await handler(data)
             else:
-                log_info("Unknown message type", raw_message=str(message))
+                log_debug("Unhandled message type", keys=list(data.keys()))
                 return None
         
         except Exception as e:
-            log_error("Error handling message", exception=e, raw_message=str(message))
+            log_error("Event handling failed", exception=e)
             return None
     
-    async def _handle_tick(self, data: Dict[str, Any]) -> Optional[Dict]:
+    async def _handle_tick(self, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Handle tick update."""
         tick = DerivSerializer.deserialize_tick(data)
         if tick:
-            log_info(f"Tick received: {tick['symbol']} @ {tick['price']}")
+            log_debug("Tick received", symbol=tick.get("symbol"), price=tick.get("price"))
         return tick
-
-    async def _handle_ohlc(self, data: Dict[str, Any]) -> Optional[Dict]:
-        """Handle candle update."""
+    
+    async def _handle_ohlc(self, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Handle OHLC (candle) update."""
         candle = DerivSerializer.deserialize_ohlc(data)
         if candle:
-            log_info(
-                f"Candle received: {candle['symbol']} @ {candle['close']}",
-            )
+            log_debug("Candle received", symbol=candle.get("symbol"), close=candle.get("close"))
         return candle
-
-    async def _handle_candles(self, data: Dict[str, Any]) -> Optional[Dict]:
-        """Handle candle snapshot list."""
-        payload = DerivSerializer.deserialize_candles(data)
-        if payload:
-            log_info(
-                f"Candle snapshot received: {payload['symbol']} ({len(payload['candles'])})"
-            )
-        return payload
     
-    async def _handle_balance(self, data: Dict[str, Any]) -> Optional[Dict]:
+    async def _handle_candles_snapshot(self, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Handle candle snapshot list."""
+        snapshot = DerivSerializer.deserialize_candles(data)
+        if snapshot:
+            log_info(
+                "Candle snapshot received",
+                symbol=snapshot.get("symbol"),
+                count=len(snapshot.get("candles") or []),
+            )
+        return snapshot
+    
+    async def _handle_balance(self, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Handle balance update."""
         balance = DerivSerializer.deserialize_balance(data)
+        
         if balance:
-            log_info(f"Balance updated: {balance}")
-            return {"balance": float(balance)}
-        return None
+            log_info(
+                "Balance update received",
+                account_id=balance.get("account_id"),
+                balance=balance.get("balance"),
+                currency=balance.get("currency", "USD"),
+            )
+            
+            # Broadcast to frontend
+            try:
+                account_key = balance.get("account_id")
+                if account_key is not None:
+                    account_id = int(str(account_key).split("_")[-1]) if isinstance(account_key, str) else int(account_key)
+                    broadcast_balance_update(
+                        account_id=account_id,
+                        balance=float(balance.get("balance") or 0),
+                        currency=balance.get("currency"),
+                    )
+            except Exception as e:
+                log_error("Failed to broadcast balance", exception=e)
+        
+        return balance
     
-    async def _handle_proposal(self, data: Dict[str, Any]) -> Optional[Dict]:
-        """Handle proposal response."""
+    async def _handle_proposal(self, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Handle contract proposal."""
         proposal = DerivSerializer.deserialize_proposal(data)
         if proposal:
-            log_info(f"Proposal received: {proposal['id']} @ {proposal['ask_price']}")
+            log_info("Proposal received", proposal_id=proposal.get("id"), symbol=proposal.get("symbol"), ask_price=proposal.get("ask_price"))
         return proposal
-
-    async def _handle_authorize(self, data: Dict[str, Any]) -> Optional[Dict]:
-        """Handle authorize response."""
-        auth = DerivSerializer.deserialize_authorize(data)
-        if auth:
-            log_info("Deriv authorization confirmed", loginid=auth.get("loginid"))
-        return auth
-
-    async def _handle_buy(self, data: Dict[str, Any]) -> Optional[Dict]:
-        """Handle buy response."""
+    
+    async def _handle_buy(self, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Handle buy confirmation."""
         buy = DerivSerializer.deserialize_buy(data)
         if buy:
             log_info(
                 "Buy confirmed",
                 contract_id=buy.get("contract_id"),
                 transaction_id=buy.get("transaction_id"),
+                price=buy.get("buy_price"),
             )
         return buy
-
-    async def _handle_open_contract(self, data: Dict[str, Any]) -> Optional[Dict]:
-        """Handle proposal_open_contract updates."""
+    
+    async def _handle_open_contract(self, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Handle open contract updates."""
         update = DerivSerializer.deserialize_open_contract(data)
+        
         if update:
-            log_info(
-                "Contract update",
-                contract_id=update.get("contract_id"),
-                status=update.get("status"),
-                is_sold=update.get("is_sold"),
-            )
+            status = update.get('status')
+            is_sold = update.get('is_sold', False)
+            
+            if is_sold:
+                profit = update.get('profit', 0)
+                log_info(
+                    "Contract closed",
+                    contract_id=update.get("contract_id"),
+                    profit=profit,
+                    status=status,
+                )
+            else:
+                log_debug("Contract update", contract_id=update.get("contract_id"), status=status)
+            
+            # Broadcast to frontend
+            try:
+                broadcast_trade_update(update)
+            except Exception as e:
+                log_error("Failed to broadcast trade update", exception=e)
+        
         return update
     
-    async def _handle_error(self, data: Dict[str, Any]) -> Dict:
+    async def _handle_authorize(self, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Handle authorize response."""
+        auth = DerivSerializer.deserialize_authorize(data)
+        if auth:
+            log_info(
+                "Authorization successful",
+                loginid=auth.get("loginid"),
+                balance=auth.get("balance"),
+            )
+        return auth
+    
+    async def _handle_error(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Handle error message."""
         error = data.get("error", {})
-        code = error.get("code")
+        code = error.get("code", "Unknown")
         message = error.get("message", "Unknown error")
         
         log_error(f"Deriv error: {message}", code=code)
@@ -149,21 +211,9 @@ class DerivEventHandler:
             "event": "error",
             "code": code,
             "message": message,
+            "raw": data,
         }
 
-def broadcast_balance_update(account_id: int, balance: float):
-    """
-    Broadcast a balance update to all relevant websocket clients.
-    Message format: {"type":"balance_update","data":{"account_id": ..., "balance": ...}}
-    """
-    try:
-        msg = {"type": "balance_update", "data": {"account_id": account_id, "balance": balance}}
-        # connection_pool broadcast helper — connection_pool should expose a broadcast/json-send method
-        try:
-            connection_pool.broadcast(msg)
-        except Exception:
-            # fallback: stringify
-            connection_pool.broadcast(json.dumps(msg))
-        log_info("Broadcasted balance update", account_id=account_id, balance=balance)
-    except Exception as e:
-        log_error("Failed to broadcast balance update", exception=e)
+
+# Global handler instance
+handler = DerivEventHandler()

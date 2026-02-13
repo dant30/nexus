@@ -1,20 +1,48 @@
 """
-Deriv WebSocket integration module.
-Handles real-time connection to Deriv API.
+Deriv WebSocket integration for Nexus Trading.
+Professional WebSocket client with connection pooling and event handling.
 """
 
 from .client import DerivWebSocketClient
-from .connection_pool import ConnectionPool, pool
-from .events import DerivEventType, WebSocketStatus
-from .handlers import DerivEventHandler
-from .serializers import DerivSerializer
+from .connection_pool import pool
+from .events import (
+    DerivEventType,
+    WebSocketStatus,
+    Subscription,
+    SubscriptionManager,
+    subscription_manager,
+)
+from .handlers import handler, DerivEventHandler
+from .serializers import (
+    DerivSerializer,
+    TickData,
+    CandleData,
+    ContractProposal,
+    ContractStatus,
+    BalanceUpdate,
+)
 
 __all__ = [
+    # Client
     "DerivWebSocketClient",
-    "ConnectionPool",
     "pool",
+    
+    # Events
     "DerivEventType",
     "WebSocketStatus",
+    "Subscription",
+    "SubscriptionManager",
+    "subscription_manager",
+    
+    # Handlers
     "DerivEventHandler",
+    "handler",
+    
+    # Serializers
     "DerivSerializer",
+    "TickData",
+    "CandleData",
+    "ContractProposal",
+    "ContractStatus",
+    "BalanceUpdate",
 ]

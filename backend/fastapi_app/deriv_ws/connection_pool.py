@@ -1,129 +1,186 @@
 """
-Connection pool for managing Deriv WebSocket connections.
+Professional connection pool for Deriv WebSocket clients.
+Manages multiple user connections with automatic cleanup.
 """
-
-from typing import TYPE_CHECKING, Optional
+from typing import Dict, Optional
 import asyncio
+from datetime import datetime, timedelta
 
-# Only import the client class for type checking to avoid circular import at runtime
-if TYPE_CHECKING:
-    from .client import DerivWebSocketClient  # pragma: no cover
-
+from .client import DerivWebSocketClient
 from fastapi_app.config import settings
-from shared.utils.logger import log_info, log_error, get_logger
+from shared.utils.logger import log_info, log_error, log_warning, get_logger
 
-logger = get_logger("pool")
+logger = get_logger("deriv_pool")
 
 
 class ConnectionPool:
     """
-    Manage multiple Deriv WebSocket connections.
-    One connection per user or shared connection with multiplexing.
+    Professional connection pool for Deriv WebSocket clients.
+    
+    Features:
+    - One connection per user (isolated)
+    - Automatic cleanup of idle connections
+    - Connection reuse within same user
+    - Graceful shutdown
+    - Performance metrics
     """
     
     def __init__(self):
-        """Initialize connection pool."""
-        self._clients = {}
+        self._clients: Dict[str, DerivWebSocketClient] = {}
+        self._last_used: Dict[str, datetime] = {}
+        self._cleanup_task: Optional[asyncio.Task] = None
+        self._cleanup_interval = 300  # 5 minutes
+        self._idle_timeout = 1800  # 30 minutes
+    
+    async def start(self):
+        """Start background cleanup task."""
+        if not self._cleanup_task:
+            self._cleanup_task = asyncio.create_task(self._cleanup_loop())
+            logger.info("Connection pool started")
+    
+    async def stop(self):
+        """Stop pool and close all connections."""
+        if self._cleanup_task:
+            self._cleanup_task.cancel()
+            self._cleanup_task = None
+        
+        await self.close_all()
+        logger.info("Connection pool stopped")
     
     async def get_or_create(
         self,
         user_id: int,
         api_token: str,
-    ) -> Optional["DerivWebSocketClient"]:
+    ) -> Optional[DerivWebSocketClient]:
         """
         Get existing connection or create new one.
-
+        
         Args:
-        - user_id: User ID (for connection key)
-        - api_token: Deriv API token
-
+            user_id: Nexus user ID
+            api_token: Deriv API token
+        
         Returns:
-        - DerivWebSocketClient or None if failed
+            DerivWebSocketClient or None if failed
         """
-        key = f"user_{user_id}"
-
-        # Check if connection exists and is alive
+        key = f"deriv_{user_id}"
+        
+        # Update last used time
+        self._last_used[key] = datetime.utcnow()
+        
+        # Check for existing healthy connection
         if key in self._clients:
             client = self._clients[key]
-            if getattr(client, "status", None) and client.status.value in ["connected", "authorized"]:
+            if client.status in ["connected", "authorized"]:
                 return client
             else:
-                # Remove dead connection
-                del self._clients[key]
-
-        # Local import to avoid circular import at module import time
-        try:
-            from .client import DerivWebSocketClient
-        except Exception as e:
-            log_error("Failed to import DerivWebSocketClient", exception=e)
-            return None
-
+                # Remove unhealthy connection
+                await self.close(user_id)
+        
         # Create new connection
         try:
-            client = DerivWebSocketClient(settings.DERIV_APP_ID, api_token)
-
+            client = DerivWebSocketClient(
+                app_id=settings.DERIV_APP_ID,
+                api_token=api_token,
+                user_id=user_id,
+            )
+            
             if await client.connect():
                 self._clients[key] = client
-                log_info(f"Created new connection for user {user_id}")
+                log_info(f"Created new Deriv connection", user_id=user_id)
                 return client
             else:
-                log_error(f"Failed to connect new client for user {user_id}")
+                log_error(f"Failed to connect Deriv client", user_id=user_id)
                 return None
-
+        
         except Exception as e:
-            log_error(f"Connection creation error for user {user_id}", exception=e)
+            log_error(f"Connection creation failed", exception=e, user_id=user_id)
             return None
     
     async def close(self, user_id: int):
-        """
-        Close connection for a user.
-
-        Args:
-        - user_id: User ID
-        """
-        key = f"user_{user_id}"
+        """Close connection for a specific user."""
+        key = f"deriv_{user_id}"
         
         if key in self._clients:
             client = self._clients[key]
-            await client.disconnect()
-            del self._clients[key]
+            try:
+                await client.disconnect()
+            except Exception as e:
+                log_error(f"Error disconnecting client", exception=e, user_id=user_id)
+            finally:
+                del self._clients[key]
+                self._last_used.pop(key, None)
+                log_info(f"Closed Deriv connection", user_id=user_id)
     
     async def close_all(self):
         """Close all connections."""
-        for client in self._clients.values():
-            await client.disconnect()
+        for user_id in list(self._clients.keys()):
+            await self.close(int(user_id.split("_")[1]))
         self._clients.clear()
-
-    def broadcast(self, message):
+        self._last_used.clear()
+        logger.info("All Deriv connections closed")
+    
+    async def _cleanup_loop(self):
+        """Periodically cleanup idle connections."""
+        while True:
+            try:
+                await asyncio.sleep(self._cleanup_interval)
+                await self._cleanup_idle_connections()
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                log_error("Cleanup error", exception=e)
+    
+    async def _cleanup_idle_connections(self):
+        """Remove connections that have been idle too long."""
+        now = datetime.utcnow()
+        idle_timeout = timedelta(seconds=self._idle_timeout)
+        
+        for key, last_used in list(self._last_used.items()):
+            if now - last_used > idle_timeout:
+                user_id = int(key.split("_")[1])
+                logger.info(f"Closing idle connection", user_id=user_id)
+                await self.close(user_id)
+    
+    def get_active_connections(self) -> int:
+        """Get number of active connections."""
+        return len(self._clients)
+    
+    def get_connection_stats(self) -> Dict:
+        """Get connection pool statistics."""
+        return {
+            "active_connections": len(self._clients),
+            "idle_connections": len(self._clients) - len(self._last_used),
+            "users": list(self._clients.keys()),
+        }
+    
+    def broadcast(self, message: Dict):
         """
-        Broadcast a message to all connected frontend WebSocket clients.
-
-        This schedules non-blocking asyncio tasks to send JSON to each
-        WebSocket stored in app.state.ws_connections (FastAPI/Starlette WebSocket).
+        Broadcast message to all connected frontend WebSocket clients.
+        Non-blocking - schedules tasks for each connection.
         """
         try:
-            # Import here to avoid circular imports at module import time
+            # Import here to avoid circular imports
             from fastapi_app.main import app
             from starlette.websockets import WebSocketState
-
-            connections = getattr(app.state, "ws_connections", {}) or {}
-
-            for ws in list(connections.values()):
-                async def _send(w):
+            
+            connections = getattr(app.state, "ws_connections", {})
+            
+            for user_id, ws in connections.items():
+                async def _send(websocket, msg):
                     try:
-                        # Only send if still connected
-                        if getattr(w, "client_state", None) == WebSocketState.CONNECTED:
-                            await w.send_json(message)
+                        if getattr(websocket, "client_state", None) == WebSocketState.CONNECTED:
+                            await websocket.send_json(msg)
                     except Exception as e:
-                        log_error("Failed to send websocket message", exception=e)
-
-                try:
-                    asyncio.create_task(_send(ws))
-                except Exception as e:
-                    log_error("Failed to schedule websocket send", exception=e)
-
+                        log_error(f"Failed to send to user {user_id}", exception=e)
+                
+                asyncio.create_task(_send(ws, message))
+            
+            if connections:
+                logger.debug(f"Broadcasted message to {len(connections)} clients")
+        
         except Exception as e:
             log_error("Broadcast failed", exception=e)
 
-# Global connection pool
+
+# Global connection pool instance
 pool = ConnectionPool()
