@@ -248,7 +248,7 @@ async def _handle_oauth_callback(payload: OAuthCallbackRequest):
             if is_virtual is None:
                 is_virtual = _login_id_is_virtual(account_login_id) or False
 
-            account_type = Account.ACCOUNT_DEMO if is_virtual else Account.ACCOUNT_REAL
+            account_type = Account.TYPE_DEMO if is_virtual else Account.TYPE_REAL
             account_currency = account.get("currency") or currency or "USD"
             account_balance = account.get("balance")
             if account_balance is None and login_id and str(account_login_id) == str(login_id):
@@ -263,7 +263,7 @@ async def _handle_oauth_callback(payload: OAuthCallbackRequest):
 
             await sync_to_async(Account.objects.update_or_create)(
                 user=user,
-                deriv_account_id=str(account_login_id),
+                account_id=str(account_login_id),
                 defaults={
                     "account_type": account_type,
                     "currency": str(account_currency),
@@ -281,7 +281,7 @@ async def _handle_oauth_callback(payload: OAuthCallbackRequest):
             first_account = account_list[0]
             fallback_login_id = first_account.get("loginid") or first_account.get("account_id")
             if fallback_login_id:
-                await sync_to_async(Account.objects.filter(user=user, deriv_account_id=str(fallback_login_id)).update)(
+                await sync_to_async(Account.objects.filter(user=user, account_id=str(fallback_login_id)).update)(
                     is_default=True
                 )
 

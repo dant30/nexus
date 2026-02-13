@@ -66,7 +66,7 @@ async def list_accounts(current_user: CurrentUser = Depends(get_current_user)):
         return [
             AccountResponse(
                 id=acc.id,
-                deriv_account_id=acc.deriv_account_id,
+                deriv_account_id=acc.account_id,
                 account_type=acc.account_type,
                 currency=acc.currency,
                 balance=str(acc.balance),
@@ -96,7 +96,7 @@ async def get_default_account_endpoint(current_user: CurrentUser = Depends(get_c
         
         return AccountResponse(
             id=account.id,
-            deriv_account_id=account.deriv_account_id,
+            deriv_account_id=account.account_id,
             account_type=account.account_type,
             currency=account.currency,
             balance=str(account.balance),
@@ -127,7 +127,7 @@ async def get_account(
         
         return AccountResponse(
             id=account.id,
-            deriv_account_id=account.deriv_account_id,
+            deriv_account_id=account.account_id,
             account_type=account.account_type,
             currency=account.currency,
             balance=str(account.balance),
@@ -168,7 +168,7 @@ async def create_demo_account_endpoint(
         
         return AccountResponse(
             id=account.id,
-            deriv_account_id=account.deriv_account_id,
+            deriv_account_id=account.account_id,
             account_type=account.account_type,
             currency=account.currency,
             balance=str(account.balance),
