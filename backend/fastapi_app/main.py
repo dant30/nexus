@@ -65,7 +65,7 @@ class AppState:
         # Bot instances - PERSISTED across disconnects
         self.bot_instances: Dict[str, Dict] = {}
         
-        # Deriv client and subscriptions
+        # Public market-data client and subscriptions (no auth token)
         self.deriv_client: Optional[DerivWebSocketClient] = None
         self.deriv_subscriptions: set = set()
         self.deriv_candle_subscriptions: set = set()
@@ -114,13 +114,13 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         log_error("❌ Failed to start Deriv connection pool", exception=e)
     
-    # Initialize Deriv WebSocket client
-    if settings.DERIV_API_KEY:
+    # Initialize public Deriv market-data client (no owner token auth)
+    if settings.DERIV_APP_ID:
         try:
-            # Use shared connection pool for better resource management
+            # Shared public feed client (ticks/candles only).
             app.state.deriv_client = DerivWebSocketClient(
                 settings.DERIV_APP_ID,
-                settings.DERIV_API_KEY,
+                "",
                 user_id=None  # Shared client
             )
 
@@ -170,14 +170,14 @@ async def lifespan(app: FastAPI):
                 await asyncio.sleep(2)
             
             if connected:
-                log_info("✅ Deriv WebSocket connected")
+                log_info("✅ Deriv public market feed connected")
             else:
                 log_error("❌ Failed to connect to Deriv after 3 attempts")
                 
         except Exception as e:
             log_error("❌ Deriv client initialization failed", exception=e)
     else:
-        log_info("Deriv API key not configured; market stream disabled")
+        log_info("Deriv app id not configured; market stream disabled")
 
     yield
     

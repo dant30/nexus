@@ -114,10 +114,14 @@ class DerivWebSocketClient:
             self._queue_processor_task = asyncio.create_task(self._queue_processor_loop())
             self._ping_task = asyncio.create_task(self._ping_loop())
             
-            # Authorize connection
-            if not await self.authorize():
-                await self.disconnect()
-                return False
+            # Public-feed mode: no token means no authorization step.
+            if self.api_token:
+                if not await self.authorize():
+                    await self.disconnect()
+                    return False
+            else:
+                self.status = WebSocketStatus.AUTHORIZED
+                log_info("Connected to Deriv in public-feed mode", user_id=self.user_id)
             
             log_info("Connected to Deriv", user_id=self.user_id)
             return True
@@ -348,6 +352,12 @@ class DerivWebSocketClient:
     
     async def subscribe_candles(self, symbol: str, granularity: int = 60) -> bool:
         """Subscribe to real-time candles for a symbol."""
+        # Skip if no user_id (shared/public client)
+        if self.user_id is None:
+            request = DerivSerializer.subscribe_candles(symbol, granularity)
+            response = await self.request(request, timeout=10)
+            return response is not None
+
         # Check if already subscribed
         existing = subscription_manager.get_by_user_symbol_event(
             self.user_id, symbol, DerivEventType.CANDLE.value

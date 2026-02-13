@@ -35,11 +35,23 @@ def _next_req_id() -> int:
 def _resolve_deriv_token_for_trade(user, account) -> Optional[str]:
     """Resolve the Deriv token used for trade execution (account token first)."""
     token = None
+    token_source = None
     metadata = getattr(account, "metadata", None)
     if isinstance(metadata, dict):
         token = metadata.get("token")
+        if token:
+            token_source = "account.metadata.token"
     if not token:
         token = getattr(user, "deriv_access_token", None)
+        if token:
+            token_source = "user.deriv_access_token"
+    if token and token_source:
+        log_info(
+            "Resolved Deriv token source for trade execution",
+            user_id=getattr(user, "id", None),
+            account_id=getattr(account, "id", None),
+            token_source=token_source,
+        )
     return token
 
 
