@@ -21,7 +21,7 @@ export const getAccountBalance = async (accountId) => {
 };
 
 export const getLiveBalance = async (accountId) => {
-  const { data } = await client.get(`${API_ENDPOINTS.ACCOUNTS.BALANCE(accountId)}/live`);
+  const { data } = await client.get(API_ENDPOINTS.ACCOUNTS.BALANCE_LIVE(accountId));
   return data;
 };
 
