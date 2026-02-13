@@ -254,6 +254,54 @@ class DerivWebSocketClient:
         finally:
             self.pending_requests.pop(req_id, None)
 
+    async def wait_for_event(
+        self,
+        event_type: str,
+        predicate: Optional[Callable[[Dict[str, Any]], bool]] = None,
+        timeout: int = 15,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Wait for a specific event type from the message stream.
+        
+        Args:
+            event_type: The type of event to wait for (e.g., "proposal", "buy")
+            predicate: Optional function to filter events
+            timeout: Maximum time to wait in seconds
+        
+        Returns:
+            The matching event dict, or None if timeout
+        """
+        # Create a future for this specific event
+        future = asyncio.get_event_loop().create_future()
+        
+        # Create a temporary event handler
+        async def event_handler(data):
+            if not future.done():
+                # Check if this is the event we're waiting for
+                if "event" in data and data["event"] == event_type:
+                    if predicate is None or predicate(data):
+                        future.set_result(data)
+                # Also check for event type in the data keys (Deriv sometimes puts type in root)
+                elif event_type in data:
+                    evt_data = {event_type: data[event_type], "event": event_type}
+                    if predicate is None or predicate(evt_data):
+                        future.set_result(evt_data)
+        
+        # Register temporary handler
+        self.event_handlers[f"_wait_{event_type}_{id(future)}"] = event_handler
+        
+        try:
+            # Wait for the event with timeout
+            result = await asyncio.wait_for(future, timeout=timeout)
+            return result
+        except asyncio.TimeoutError:
+            log_warning(f"Timeout waiting for event: {event_type}", timeout=timeout)
+            return None
+        finally:
+            # Clean up temporary handler
+            self.event_helpers = getattr(self, "event_helpers", {})
+            self.event_handlers.pop(f"_wait_{event_type}_{id(future)}", None)
+
     def _next_req_id(self) -> int:
         """
         Deriv requires integer req_id; keep it strictly monotonic to avoid collisions.
@@ -349,9 +397,15 @@ class DerivWebSocketClient:
         self,
         proposal_id: str,
         price: Union[Decimal, float, str],
+        req_id: Optional[int] = None,  # Add this parameter
     ) -> Optional[Dict[str, Any]]:
-        """Execute a contract purchase."""
+        """Execute a contract purchase with optional req_id for correlation."""
         request = DerivSerializer.buy_contract(proposal_id, price)
+        
+        # Add req_id if provided
+        if req_id is not None:
+            request["req_id"] = req_id
+            
         return await self.request(request, timeout=15, retry_count=1)
     
     async def subscribe_open_contract(self, contract_id: int) -> bool:
