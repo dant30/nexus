@@ -6,7 +6,7 @@ import asyncio
 import time
 from contextlib import asynccontextmanager
 from decimal import Decimal
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -448,7 +448,12 @@ async def _maybe_execute_bot_trade(
     )()
     
     if has_open_trade:
-        trade_age_seconds = (datetime.utcnow() - has_open_trade.created_at).total_seconds()
+        now_utc = datetime.now(timezone.utc)
+        trade_created_at = has_open_trade.created_at
+        if trade_created_at.tzinfo is None:
+            # Treat legacy naive timestamps as UTC to avoid mixed-aware subtraction.
+            trade_created_at = trade_created_at.replace(tzinfo=timezone.utc)
+        trade_age_seconds = (now_utc - trade_created_at).total_seconds()
         if trade_age_seconds > 120:  # 2 minutes
             log_info(
                 "Auto-failing old open trade",
