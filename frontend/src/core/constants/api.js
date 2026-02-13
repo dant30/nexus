@@ -5,7 +5,7 @@
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api/v1";
 const WS_BASE_URL = import.meta.env.VITE_WS_BASE_URL || "ws://localhost:8000/ws";
-const API_TIMEOUT = 30000; // 30 seconds
+export const API_TIMEOUT = 30000; // 30 seconds
 
 // API Endpoints
 export const API_ENDPOINTS = {
@@ -19,6 +19,10 @@ export const API_ENDPOINTS = {
     CHANGE_PASSWORD: `${API_BASE_URL}/auth/change-password`,
     OAUTH_AUTHORIZE: `${API_BASE_URL}/oauth/deriv/authorize`,
     OAUTH_CALLBACK: `${API_BASE_URL}/oauth/deriv/callback`,
+  },
+  OAUTH: {
+    DERIV_AUTHORIZE: `${API_BASE_URL}/oauth/deriv/authorize`,
+    DERIV_CALLBACK: `${API_BASE_URL}/oauth/deriv/callback`,
   },
 
   // Users
@@ -35,6 +39,7 @@ export const API_ENDPOINTS = {
     GET: (id) => `${API_BASE_URL}/accounts/${id}`,
     SET_DEFAULT: (id) => `${API_BASE_URL}/accounts/${id}/default`,
     BALANCE: (id) => `${API_BASE_URL}/accounts/${id}/balance`,
+    BALANCE_LIVE: (id) => `${API_BASE_URL}/accounts/${id}/balance/live`,
     DEFAULT: `${API_BASE_URL}/accounts/default`,
   },
 
@@ -45,6 +50,7 @@ export const API_ENDPOINTS = {
     GET: (id) => `${API_BASE_URL}/trades/${id}`,
     CLOSE: (id) => `${API_BASE_URL}/trades/${id}/close`,
     PROFIT: (id) => `${API_BASE_URL}/trades/${id}/profit`,
+    STATS: `${API_BASE_URL}/trades/stats`,
   },
 
   // Billing
@@ -69,12 +75,18 @@ export const WS_ENDPOINTS = {
 export const HTTP_STATUS = {
   OK: 200,
   CREATED: 201,
+  ACCEPTED: 202,
+  NO_CONTENT: 204,
   BAD_REQUEST: 400,
   UNAUTHORIZED: 401,
   FORBIDDEN: 403,
   NOT_FOUND: 404,
+  TOO_MANY_REQUESTS: 429,
   CONFLICT: 409,
   INTERNAL_ERROR: 500,
+  BAD_GATEWAY: 502,
+  SERVICE_UNAVAILABLE: 503,
+  GATEWAY_TIMEOUT: 504,
 };
 
 // Default request headers
@@ -87,7 +99,13 @@ export const DEFAULT_HEADERS = {
 export const RETRY_CONFIG = {
   MAX_RETRIES: 3,
   RETRY_DELAY: 1000, // 1 second
-  RETRY_STATUS_CODES: [408, 429, 500, 502, 503, 504],
+  RETRY_STATUS_CODES: [
+    HTTP_STATUS.TOO_MANY_REQUESTS,
+    HTTP_STATUS.INTERNAL_ERROR,
+    HTTP_STATUS.BAD_GATEWAY,
+    HTTP_STATUS.SERVICE_UNAVAILABLE,
+    HTTP_STATUS.GATEWAY_TIMEOUT,
+  ],
 };
 
 // WebSocket reconnection config
