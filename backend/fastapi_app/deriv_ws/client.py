@@ -327,8 +327,9 @@ class DerivWebSocketClient:
         duration: int,
         duration_unit: str,
         currency: str = "USD",
+        req_id: Optional[int] = None,  # NEW: Add req_id parameter
     ) -> Optional[Dict[str, Any]]:
-        """Request a contract proposal."""
+        """Request a contract proposal with optional req_id for correlation."""
         request = DerivSerializer.proposal(
             symbol=symbol,
             contract_type=contract_type,
@@ -337,6 +338,11 @@ class DerivWebSocketClient:
             duration_unit=duration_unit,
             currency=currency,
         )
+        
+        # Add req_id if provided
+        if req_id is not None:
+            request["req_id"] = req_id
+            
         return await self.request(request, timeout=10, retry_count=2)
     
     async def buy_contract(
