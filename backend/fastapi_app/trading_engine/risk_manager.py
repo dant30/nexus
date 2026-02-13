@@ -185,6 +185,16 @@ class RiskManager:
             consecutive_losses=consecutive_losses,
             issue_count=len(issues),
         )
+
+        if check_stake != stake:
+            log_info(
+                "Recovery applied",
+                account_id=account.id,
+                requested_stake=float(stake),
+                final_stake=float(check_stake),
+                recovery_level=recovery_level,
+                consecutive_losses=consecutive_losses,
+            )
         
         return RiskAssessment(
             is_approved=is_approved,
