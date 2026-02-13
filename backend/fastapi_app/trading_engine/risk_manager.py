@@ -4,11 +4,12 @@ Professional risk management engine with comprehensive safeguards.
 from decimal import Decimal
 from typing import Optional, List, Dict, Tuple
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from django_core.accounts.models import Account
 from django_core.trades.models import Trade
 from asgiref.sync import sync_to_async
+from django.utils import timezone
 from shared.utils.logger import log_error, log_info, get_logger
 
 logger = get_logger("risk")
@@ -211,7 +212,7 @@ class RiskManager:
     @sync_to_async
     def _calculate_daily_loss(self, account: Account) -> Decimal:
         """Calculate total realized loss for today."""
-        today = datetime.utcnow().date()
+        today = timezone.now().date()
         trades = Trade.objects.filter(
             account=account,
             created_at__date=today,
@@ -230,12 +231,12 @@ class RiskManager:
         """Count current consecutive losing trades."""
         recent_trades = Trade.objects.filter(
             account=account,
-            status__in=[Trade.STATUS_WON, Trade.STATUS_LOST],
+            status__in=[Trade.STATUS_WON, Trade.STATUS_LOST, Trade.STATUS_FAILED],
         ).order_by("-created_at")[:10]
         
         consecutive = 0
         for trade in recent_trades:
-            if trade.status == Trade.STATUS_LOST:
+            if trade.status in {Trade.STATUS_LOST, Trade.STATUS_FAILED}:
                 consecutive += 1
             else:
                 break
@@ -245,7 +246,7 @@ class RiskManager:
     @sync_to_async
     def _count_trades_this_hour(self, account: Account) -> int:
         """Count trades in the past hour."""
-        one_hour_ago = datetime.utcnow() - timedelta(hours=1)
+        one_hour_ago = timezone.now() - timedelta(hours=1)
         return Trade.objects.filter(
             account=account,
             created_at__gte=one_hour_ago,
