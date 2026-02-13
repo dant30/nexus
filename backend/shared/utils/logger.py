@@ -11,13 +11,28 @@ from __future__ import annotations
 import json
 import logging
 import sys
+from datetime import date, datetime
+from decimal import Decimal
 from typing import Any, Dict, Optional
+from uuid import UUID
 
 
 # ---------- Formatter ----------
 
 class JsonFormatter(logging.Formatter):
     """JSON log formatter (safe for UTF-8, prod, and log aggregators)."""
+
+    @staticmethod
+    def _json_default(value: Any) -> Any:
+        if isinstance(value, Decimal):
+            return str(value)
+        if isinstance(value, (datetime, date)):
+            return value.isoformat()
+        if isinstance(value, UUID):
+            return str(value)
+        if isinstance(value, set):
+            return list(value)
+        return str(value)
 
     def format(self, record: logging.LogRecord) -> str:
         log_record: Dict[str, Any] = {
@@ -35,7 +50,7 @@ class JsonFormatter(logging.Formatter):
         if record.exc_info:
             log_record["exception"] = self.formatException(record.exc_info)
 
-        return json.dumps(log_record, ensure_ascii=False)
+        return json.dumps(log_record, ensure_ascii=False, default=self._json_default)
 
 
 # ---------- Logger Setup ----------
