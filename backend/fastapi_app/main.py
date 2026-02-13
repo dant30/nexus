@@ -27,6 +27,7 @@ from fastapi_app.middleware.logging import LoggingMiddleware
 from fastapi_app.api import routes
 from fastapi_app.oauth import routes as oauth_routes
 from fastapi_app.deriv_ws.client import DerivWebSocketClient
+from fastapi_app.deriv_ws.serializers import DerivSerializer
 from fastapi_app.trading_engine.engine import TradingEngine
 from fastapi_app.trading_engine.strategies import (
     MomentumStrategy,
@@ -79,18 +80,31 @@ async def lifespan(app: FastAPI):
         )
 
         async def _deriv_callback(payload):
-            if not payload or "symbol" not in payload:
+            if not payload:
                 return
-            deriv_symbol = payload["symbol"]
-            event = payload.get("event", "tick")
+
+            normalized_payload = payload
+            if "symbol" not in normalized_payload:
+                if "tick" in payload:
+                    normalized_payload = DerivSerializer.deserialize_tick(payload) or {}
+                elif "ohlc" in payload:
+                    normalized_payload = DerivSerializer.deserialize_ohlc(payload) or {}
+                elif "candles" in payload:
+                    normalized_payload = DerivSerializer.deserialize_candles(payload) or {}
+
+            if not normalized_payload or "symbol" not in normalized_payload:
+                return
+
+            deriv_symbol = normalized_payload["symbol"]
+            event = normalized_payload.get("event", "tick")
 
             if event == "candles":
-                app.state.market_candles[deriv_symbol] = payload.get("candles", [])[-600:]
+                app.state.market_candles[deriv_symbol] = normalized_payload.get("candles", [])[-600:]
             elif event == "ohlc":
-                app.state.market_candles.setdefault(deriv_symbol, []).append(payload)
+                app.state.market_candles.setdefault(deriv_symbol, []).append(normalized_payload)
                 app.state.market_candles[deriv_symbol] = app.state.market_candles[deriv_symbol][-600:]
             else:
-                app.state.market_ticks.setdefault(deriv_symbol, []).append(payload)
+                app.state.market_ticks.setdefault(deriv_symbol, []).append(normalized_payload)
                 app.state.market_ticks[deriv_symbol] = app.state.market_ticks[deriv_symbol][-600:]
 
             for connection_id, subscriptions in list(app.state.ws_subscriptions.items()):
@@ -102,13 +116,13 @@ async def lifespan(app: FastAPI):
                         continue
 
                     if event == "candles":
-                        await _send_event(websocket, "candles", payload.get("candles", []))
+                        await _send_event(websocket, "candles", normalized_payload.get("candles", []))
                     elif event == "ohlc":
-                        await _send_event(websocket, "candle", payload)
+                        await _send_event(websocket, "candle", normalized_payload)
                     else:
-                        subscription["ticks"].append(payload)
+                        subscription["ticks"].append(normalized_payload)
                         subscription["ticks"] = subscription["ticks"][-600:]
-                        await _send_event(websocket, "tick", payload)
+                        await _send_event(websocket, "tick", normalized_payload)
 
         app.state.deriv_client.on_message(_deriv_callback)
         await app.state.deriv_client.connect()
