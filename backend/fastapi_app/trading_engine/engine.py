@@ -6,7 +6,10 @@ from typing import List, Optional, Dict, Any
 from decimal import Decimal
 from datetime import datetime
 
-from fastapi_app.trading_engine.strategies import BaseStrategy, StrategySignal
+# === FIX: ADD THIS IMPORT ===
+from fastapi_app.trading_engine.strategies import BaseStrategy, StrategySignal, Signal
+# ============================
+
 from fastapi_app.trading_engine.signal_consensus import SignalConsensus, ConsensusSignal, ConsensusDecision
 from fastapi_app.trading_engine.risk_manager import RiskManager, RiskAssessment
 from django_core.accounts.models import Account
