@@ -106,6 +106,13 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         log_error("❌ Django setup failed", exception=e)
         raise
+
+    # Start per-user Deriv connection pool (trade execution clients).
+    try:
+        await deriv_pool.start()
+        log_info("✅ Deriv connection pool started")
+    except Exception as e:
+        log_error("❌ Failed to start Deriv connection pool", exception=e)
     
     # Initialize Deriv WebSocket client
     if settings.DERIV_API_KEY:
@@ -194,6 +201,13 @@ async def lifespan(app: FastAPI):
             log_info("✅ Deriv client disconnected")
         except Exception as e:
             log_error("❌ Error disconnecting Deriv client", exception=e)
+
+    # Stop per-user Deriv connection pool
+    try:
+        await deriv_pool.stop()
+        log_info("✅ Deriv connection pool stopped")
+    except Exception as e:
+        log_error("❌ Error stopping Deriv connection pool", exception=e)
     
     log_info("✅ Shutdown complete")
 

@@ -32,6 +32,17 @@ def _next_req_id() -> int:
     return int(time.time() * 1000)
 
 
+def _resolve_deriv_token_for_trade(user, account) -> Optional[str]:
+    """Resolve the Deriv token used for trade execution (account token first)."""
+    token = None
+    metadata = getattr(account, "metadata", None)
+    if isinstance(metadata, dict):
+        token = metadata.get("token")
+    if not token:
+        token = getattr(user, "deriv_access_token", None)
+    return token
+
+
 def _normalize_deriv_duration(
     trade_type: Optional[str],
     duration: Optional[int] = None,
@@ -321,10 +332,14 @@ async def _execute_trade_internal(
         duration_seconds=duration_seconds,
     )
 
-    # If no deriv client configured, create failed trade record
-    deriv_client = getattr(app.state, "deriv_client", None)
-    if not deriv_client:
-        log_error("Deriv client not available - cannot execute trade")
+    # Resolve token: execute trades using user's/account's own Deriv credentials.
+    user_token = _resolve_deriv_token_for_trade(user, account)
+    if not user_token:
+        log_error(
+            "No Deriv token available for trade execution",
+            user_id=getattr(user, "id", None),
+            account_id=getattr(account, "id", None),
+        )
         trade = await sync_to_async(create_trade)(
             user=user,
             contract_type=contract_type or ("CALL" if direction == "RISE" else "PUT"),
@@ -336,6 +351,36 @@ async def _execute_trade_internal(
             trade_type=trade_type or ("RISE_FALL" if direction in ("RISE", "FALL") else "CALL_PUT"),
             contract=contract or ("CALL" if direction == "RISE" else "PUT"),
             signal_id=signal_id,  # NEW
+        )
+        trade.status = Trade.STATUS_FAILED
+        await sync_to_async(trade.save)()
+        return trade
+
+    # Build/reuse per-user-per-account Deriv client.
+    pool_key = f"deriv_{getattr(user, 'id', 'unknown')}_{getattr(account, 'id', 'unknown')}"
+    deriv_client = await pool.get_or_create(
+        user_id=user.id,
+        api_token=user_token,
+        connection_key=pool_key,
+    )
+    if not deriv_client:
+        log_error(
+            "Failed to create user Deriv client",
+            user_id=getattr(user, "id", None),
+            account_id=getattr(account, "id", None),
+            pool_key=pool_key,
+        )
+        trade = await sync_to_async(create_trade)(
+            user=user,
+            contract_type=contract_type or ("CALL" if direction == "RISE" else "PUT"),
+            direction=direction,
+            stake=Decimal(stake),
+            account=account,
+            duration_seconds=duration_seconds,
+            proposal_id=None,
+            trade_type=trade_type or ("RISE_FALL" if direction in ("RISE", "FALL") else "CALL_PUT"),
+            contract=contract or ("CALL" if direction == "RISE" else "PUT"),
+            signal_id=signal_id,
         )
         trade.status = Trade.STATUS_FAILED
         await sync_to_async(trade.save)()

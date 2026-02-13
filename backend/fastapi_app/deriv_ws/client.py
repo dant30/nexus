@@ -487,18 +487,15 @@ class DerivWebSocketClient:
     
     async def _dispatch_event(self, data: Dict[str, Any]):
         """Dispatch message to registered event handlers."""
-        # Determine event type
-        event_type = None
+        # Dispatch handlers for all keys present in payload.
+        # Deriv event payloads use top-level keys like "proposal_open_contract", "buy", etc.
         for key in data.keys():
-            if key in DerivEventType.__members__.values() or key in ["tick", "ohlc", "candles", "balance"]:
-                event_type = key
-                break
-        
-        if event_type and event_type in self.event_handlers:
-            try:
-                await self.event_handlers[event_type](data)
-            except Exception as e:
-                log_error(f"Event handler error", exception=e, event=event_type)
+            handler = self.event_handlers.get(key)
+            if handler:
+                try:
+                    await handler(data)
+                except Exception as e:
+                    log_error("Event handler error", exception=e, event=key)
     
     async def _queue_processor_loop(self):
         """Process queued messages when connection is ready."""

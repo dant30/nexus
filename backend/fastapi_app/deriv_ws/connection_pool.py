@@ -27,6 +27,7 @@ class ConnectionPool:
     
     def __init__(self):
         self._clients: Dict[str, DerivWebSocketClient] = {}
+        self._client_tokens: Dict[str, str] = {}
         self._last_used: Dict[str, datetime] = {}
         self._cleanup_task: Optional[asyncio.Task] = None
         self._cleanup_interval = 300  # 5 minutes
@@ -51,6 +52,7 @@ class ConnectionPool:
         self,
         user_id: int,
         api_token: str,
+        connection_key: Optional[str] = None,
     ) -> Optional[DerivWebSocketClient]:
         """
         Get existing connection or create new one.
@@ -62,7 +64,7 @@ class ConnectionPool:
         Returns:
             DerivWebSocketClient or None if failed
         """
-        key = f"deriv_{user_id}"
+        key = connection_key or f"deriv_{user_id}"
         
         # Update last used time
         self._last_used[key] = datetime.utcnow()
@@ -70,11 +72,14 @@ class ConnectionPool:
         # Check for existing healthy connection
         if key in self._clients:
             client = self._clients[key]
-            if client.status in ["connected", "authorized"]:
+            previous_token = self._client_tokens.get(key)
+            if previous_token and previous_token != api_token:
+                await self.close_key(key)
+            elif client.status in ["connected", "authorized"]:
                 return client
             else:
                 # Remove unhealthy connection
-                await self.close(user_id)
+                await self.close_key(key)
         
         # Create new connection
         try:
@@ -86,6 +91,7 @@ class ConnectionPool:
             
             if await client.connect():
                 self._clients[key] = client
+                self._client_tokens[key] = api_token
                 log_info(f"Created new Deriv connection", user_id=user_id)
                 return client
             else:
@@ -97,25 +103,33 @@ class ConnectionPool:
             return None
     
     async def close(self, user_id: int):
-        """Close connection for a specific user."""
-        key = f"deriv_{user_id}"
-        
-        if key in self._clients:
-            client = self._clients[key]
-            try:
-                await client.disconnect()
-            except Exception as e:
-                log_error(f"Error disconnecting client", exception=e, user_id=user_id)
-            finally:
-                del self._clients[key]
-                self._last_used.pop(key, None)
-                log_info(f"Closed Deriv connection", user_id=user_id)
+        """Close all connections for a specific user ID prefix."""
+        prefix = f"deriv_{user_id}"
+        keys = [k for k in self._clients.keys() if k.startswith(prefix)]
+        for key in keys:
+            await self.close_key(key)
+
+    async def close_key(self, key: str):
+        """Close one connection by exact pool key."""
+        client = self._clients.get(key)
+        if not client:
+            return
+        try:
+            await client.disconnect()
+        except Exception as e:
+            log_error("Error disconnecting client", exception=e, key=key)
+        finally:
+            del self._clients[key]
+            self._client_tokens.pop(key, None)
+            self._last_used.pop(key, None)
+            log_info("Closed Deriv connection", key=key)
     
     async def close_all(self):
         """Close all connections."""
-        for user_id in list(self._clients.keys()):
-            await self.close(int(user_id.split("_")[1]))
+        for key in list(self._clients.keys()):
+            await self.close_key(key)
         self._clients.clear()
+        self._client_tokens.clear()
         self._last_used.clear()
         logger.info("All Deriv connections closed")
     
