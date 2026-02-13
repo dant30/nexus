@@ -23,6 +23,8 @@ class RiskAssessment:
     issues: List[str] = field(default_factory=list)
     max_stake: Optional[Decimal] = None
     recommended_stake: Optional[Decimal] = None
+    recovery_stake: Optional[Decimal] = None
+    recovery_level: int = 0
 
 
 class RiskManager:
@@ -45,6 +47,15 @@ class RiskManager:
     MAX_DAILY_LOSS_PERCENT = Decimal("10")  # 10% daily loss limit
     MAX_CONSECUTIVE_LOSSES = 5
     MAX_TRADES_PER_HOUR = 60
+    FIBONACCI_SEQUENCE = [
+        Decimal("1.0"),
+        Decimal("1.5"),
+        Decimal("2.25"),
+        Decimal("3.375"),
+        Decimal("5.0"),
+        Decimal("7.5"),
+        Decimal("10.0"),
+    ]
     
     def __init__(
         self,
@@ -52,12 +63,14 @@ class RiskManager:
         max_stake: Optional[Decimal] = None,
         max_daily_loss_percent: Optional[Decimal] = None,
         max_consecutive_losses: Optional[int] = None,
+        fibonacci_sequence: Optional[List[Decimal]] = None,
     ):
         """Initialize risk manager with configurable limits."""
         self.min_stake = min_stake or self.MIN_STAKE
         self.max_stake = max_stake or self.MAX_STAKE
         self.max_daily_loss_percent = max_daily_loss_percent or self.MAX_DAILY_LOSS_PERCENT
         self.max_consecutive_losses = max_consecutive_losses or self.MAX_CONSECUTIVE_LOSSES
+        self.fibonacci_sequence = fibonacci_sequence or self.FIBONACCI_SEQUENCE
     
     async def assess_trade(
         self,
@@ -72,6 +85,24 @@ class RiskManager:
         """
         issues = []
         risk_level = "LOW"
+        consecutive_losses = await self._count_consecutive_losses(account)
+        recovery_level = min(consecutive_losses, len(self.fibonacci_sequence) - 1)
+        recovery_stake = None
+        check_stake = stake
+
+        if consecutive_losses > 0:
+            multiplier = self.fibonacci_sequence[recovery_level]
+            recovery_stake = (stake * multiplier).quantize(Decimal("0.01"))
+            check_stake = recovery_stake
+            log_info(
+                "Recovery mode active",
+                account_id=account.id,
+                consecutive_losses=consecutive_losses,
+                recovery_level=recovery_level,
+                multiplier=float(multiplier),
+                requested_stake=float(stake),
+                recovery_stake=float(recovery_stake),
+            )
         
         # 1. ACCOUNT BALANCE CHECK
         if account.balance <= 0:
@@ -79,22 +110,22 @@ class RiskManager:
             risk_level = "CRITICAL"
         
         # 2. STAKE LIMIT CHECKS
-        if stake < self.min_stake:
-            issues.append(f"Stake {float(stake)} < minimum {float(self.min_stake)}")
+        if check_stake < self.min_stake:
+            issues.append(f"Stake {float(check_stake)} < minimum {float(self.min_stake)}")
             risk_level = "HIGH"
         
-        if stake > self.max_stake:
-            issues.append(f"Stake {float(stake)} > maximum {float(self.max_stake)}")
+        if check_stake > self.max_stake:
+            issues.append(f"Stake {float(check_stake)} > maximum {float(self.max_stake)}")
             risk_level = "HIGH"
         
         # 3. POSITION SIZING CHECK
         max_position = account.balance * (self.MAX_STAKE_PERCENT_OF_BALANCE / Decimal("100"))
-        if stake > max_position:
-            issues.append(f"Stake {float(stake)} > {self.MAX_STAKE_PERCENT_OF_BALANCE}% of balance ({float(max_position)})")
+        if check_stake > max_position:
+            issues.append(f"Stake {float(check_stake)} > {self.MAX_STAKE_PERCENT_OF_BALANCE}% of balance ({float(max_position)})")
             risk_level = "HIGH"
         
         # 4. SUFFICIENT BALANCE CHECK
-        if stake > account.balance:
+        if check_stake > account.balance:
             issues.append(f"Stake exceeds balance ({float(account.balance)})")
             risk_level = "CRITICAL"
         
@@ -110,7 +141,6 @@ class RiskManager:
             risk_level = "HIGH" if risk_level != "CRITICAL" else risk_level
         
         # 6. CONSECUTIVE LOSS CHECK
-        consecutive_losses = await self._count_consecutive_losses(account)
         if consecutive_losses >= self.max_consecutive_losses:
             issues.append(f"Max consecutive losses reached: {consecutive_losses}")
             risk_level = "HIGH"
@@ -146,9 +176,12 @@ class RiskManager:
         log_info(
             f"Trade risk assessment: {risk_level}",
             account_id=account.id,
-            stake=float(stake),
+            requested_stake=float(stake),
+            final_stake=float(check_stake),
             approved=is_approved,
             risk_level=risk_level,
+            recovery_level=recovery_level,
+            consecutive_losses=consecutive_losses,
             issue_count=len(issues),
         )
         
@@ -159,6 +192,8 @@ class RiskManager:
             issues=issues,
             max_stake=max_stake,
             recommended_stake=recommended_stake,
+            recovery_stake=recovery_stake,
+            recovery_level=recovery_level,
         )
     
     def _calculate_recommended_stake(self, account: Account) -> Decimal:

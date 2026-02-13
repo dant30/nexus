@@ -223,6 +223,7 @@ class TradingEngine:
             
             # 5. ASSESS RISK
             risk_assessment = await self.risk_manager.assess_trade(self.account, stake)
+            final_stake = risk_assessment.recovery_stake or stake
             
             if not risk_assessment.is_approved:
                 return {
@@ -239,7 +240,9 @@ class TradingEngine:
             log_info(
                 f"Trade executable: {direction}",
                 confidence=consensus.confidence,
-                stake=float(stake),
+                requested_stake=float(stake),
+                final_stake=float(final_stake),
+                recovery_level=risk_assessment.recovery_level,
                 decision=consensus.decision.value,
                 account_id=self.account.id,
             )
@@ -248,11 +251,14 @@ class TradingEngine:
                 "success": True,
                 "executable": True,
                 "direction": direction,
-                "stake": float(stake),
+                "stake": float(final_stake),
+                "original_stake": float(stake) if final_stake != stake else None,
                 "confidence": consensus.confidence,
                 "decision": consensus.decision.value,
                 "risk_assessment": {
                     "risk_level": risk_assessment.risk_level,
+                    "recovery_level": risk_assessment.recovery_level,
+                    "recovery_stake": float(risk_assessment.recovery_stake) if risk_assessment.recovery_stake else None,
                     "recommended_stake": float(risk_assessment.recommended_stake) if risk_assessment.recommended_stake else None,
                     "max_stake": float(risk_assessment.max_stake) if risk_assessment.max_stake else None,
                 },

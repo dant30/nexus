@@ -35,6 +35,7 @@ from fastapi_app.deriv_ws.client import DerivWebSocketClient
 from fastapi_app.deriv_ws.serializers import DerivSerializer
 from fastapi_app.deriv_ws.connection_pool import pool as deriv_pool
 from fastapi_app.trading_engine.engine import TradingEngine
+from fastapi_app.trading_engine.risk_manager import RiskManager
 from fastapi_app.trading_engine.strategies import (
     MomentumStrategy,
     BreakoutStrategy,
@@ -64,6 +65,7 @@ class AppState:
         
         # Bot instances - PERSISTED across disconnects
         self.bot_instances: Dict[str, Dict] = {}
+        self.risk_manager: Optional[RiskManager] = None
         
         # Public market-data client and subscriptions (no auth token)
         self.deriv_client: Optional[DerivWebSocketClient] = None
@@ -106,6 +108,12 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         log_error("❌ Django setup failed", exception=e)
         raise
+
+    try:
+        app.state.risk_manager = RiskManager()
+        log_info("✅ Risk manager initialized")
+    except Exception as e:
+        log_error("❌ Risk manager init failed", exception=e)
 
     # Start per-user Deriv connection pool (trade execution clients).
     try:
@@ -276,6 +284,7 @@ async def _load_bot_state_from_db(user_id: int, account_id: int) -> Optional[Dic
             "session_trades": 0,
             "cooldown_until": 0,
             "last_trade_key": None,
+            "recovery_level": 0,
         }
     except Exception as e:
         log_error("Failed to load bot state from DB", exception=e)
@@ -522,7 +531,11 @@ async def _send_bot_status(connection_id: str, data: dict):
     websocket = app.state.ws_connections.get(connection_id)
     if not websocket:
         return
-    await _send_event(websocket, "bot_status", data)
+    payload = dict(data or {})
+    if "recovery_level" not in payload:
+        bot_state = app.state.bot_instances.get(connection_id, {})
+        payload["recovery_level"] = int(bot_state.get("recovery_level", 0) or 0)
+    await _send_event(websocket, "bot_status", payload)
 
 
 async def _stop_bot(connection_id: str, reason: str = "stopped", notify: bool = True):
@@ -697,6 +710,35 @@ async def _maybe_execute_bot_trade(
         return
 
     # Log trade attempt
+    requested_stake = Decimal(str(bot_state.get("stake")))
+    final_stake = requested_stake
+    risk_manager = getattr(app.state, "risk_manager", None)
+    if risk_manager is not None:
+        try:
+            risk_assessment = await risk_manager.assess_trade(account, requested_stake)
+            bot_state["recovery_level"] = int(risk_assessment.recovery_level or 0)
+            app.state.bot_instances[connection_id] = bot_state
+            if not risk_assessment.is_approved:
+                log_info(
+                    "Bot skipped trade: risk rejected",
+                    connection_id=connection_id,
+                    risk_level=risk_assessment.risk_level,
+                    reason=risk_assessment.reason,
+                    issues=risk_assessment.issues,
+                    symbol=signal.get("symbol"),
+                )
+                return
+
+            final_stake = risk_assessment.recovery_stake or requested_stake
+        except Exception as exc:
+            log_error(
+                "Bot skipped trade: risk check failed",
+                connection_id=connection_id,
+                account_id=account_id,
+                exception=exc,
+            )
+            return
+
     log_info(
         "🚀 Bot executing trade",
         connection_id=connection_id,
@@ -707,7 +749,8 @@ async def _maybe_execute_bot_trade(
         execution_trade_type=execution_config["trade_type"],
         execution_contract=execution_config["contract"],
         confidence=confidence,
-        stake=bot_state.get("stake"),
+        requested_stake=float(requested_stake),
+        final_stake=float(final_stake),
         duration_seconds=bot_state.get("duration_seconds"),
         duration=bot_state.get("duration"),
         duration_unit=bot_state.get("duration_unit"),
@@ -724,7 +767,7 @@ async def _maybe_execute_bot_trade(
         account=account,
         symbol=bot_state.get("symbol"),
         direction=execution_config["direction"],
-        stake=Decimal(str(bot_state.get("stake"))),
+        stake=final_stake,
         duration_seconds=int(bot_state.get("duration_seconds", 60)),
         duration=int(bot_state.get("duration", bot_state.get("duration_seconds", 60))),
         duration_unit=str(bot_state.get("duration_unit") or "s"),
@@ -1221,6 +1264,7 @@ async def handle_ws_message(websocket: WebSocket, user_id: int, account_id: int,
             "cooldown_until": 0,
             "last_trade_key": None,
             "last_trade_time": None,
+            "recovery_level": 0,
             "task": None,
             "created_at": time.time(),
         }
