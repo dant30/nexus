@@ -673,17 +673,15 @@ async def list_trades(
         raise HTTPException(status_code=500, detail="Server error")
 
 
-@router.get("/", response_model=List[TradeResponse])
-async def list_trades(
-    limit: int = 50,
-    offset: int = 0,
+@router.get("/open", response_model=List[TradeResponse])
+async def list_open_trades_endpoint(
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    """Get user's trade history."""
+    """Get user's currently open trades."""
     try:
         user = await sync_to_async(User.objects.get)(id=current_user.user_id)
-        trades = await sync_to_async(list)(get_user_trades(user, limit=limit + offset))
-        
+        trades = await sync_to_async(list)(get_open_trades(user))
+
         return [
             TradeResponse(
                 id=trade.id,
@@ -701,21 +699,22 @@ async def list_trades(
                 markup_applied=str(trade.markup_applied),
                 created_at=trade.created_at.isoformat(),
                 updated_at=trade.updated_at.isoformat(),
-                trade_type=getattr(trade, 'trade_type', None) or ('RISE_FALL' if trade.direction in ('RISE', 'FALL') else 'CALL_PUT'),
-                contract=getattr(trade, 'contract', None) or (trade.direction if trade.direction in ('RISE', 'FALL') else trade.contract_type),
-                signal_id=getattr(trade, 'signal_id', None),  # Ensure signal_id is included
+                trade_type=getattr(trade, "trade_type", None)
+                or ("RISE_FALL" if trade.direction in ("RISE", "FALL") else "CALL_PUT"),
+                contract=getattr(trade, "contract", None)
+                or (trade.direction if trade.direction in ("RISE", "FALL") else trade.contract_type),
+                signal_id=getattr(trade, "signal_id", None),
             )
-            for trade in trades[offset:]
+            for trade in trades
         ]
-        
     except User.DoesNotExist:
         raise HTTPException(status_code=404, detail="User not found")
     except Exception as e:
-        log_error("Failed to fetch trades", exception=e)
+        log_error("Failed to fetch open trades", exception=e)
         raise HTTPException(status_code=500, detail="Server error")
 
 
-@router.get("/{trade_id}", response_model=TradeResponse)
+@router.get("/{trade_id:int}", response_model=TradeResponse)
 async def get_trade(
     trade_id: int,
     current_user: CurrentUser = Depends(get_current_user),
@@ -754,7 +753,7 @@ async def get_trade(
         raise HTTPException(status_code=500, detail="Server error")
 
 
-@router.post("/{trade_id}/close", response_model=TradeResponse)
+@router.post("/{trade_id:int}/close", response_model=TradeResponse)
 async def close_trade_endpoint(
     trade_id: int,
     request: CloseTradeRequest,
@@ -812,7 +811,7 @@ async def close_trade_endpoint(
         raise HTTPException(status_code=500, detail="Close failed")
 
 
-@router.get("/{trade_id}/profit")
+@router.get("/{trade_id:int}/profit")
 async def get_trade_profit(
     trade_id: int,
     current_user: CurrentUser = Depends(get_current_user),
