@@ -77,7 +77,8 @@ class Trade(models.Model):
         max_length=128,
         blank=True,
         null=True,
-        db_index=True
+        db_index=True,
+        help_text="Signal ID that triggered this trade"
     )
 
     # ---------- Trade Data ----------

@@ -673,12 +673,16 @@ async def list_trades(
         raise HTTPException(status_code=500, detail="Server error")
 
 
-@router.get("/open", response_model=List[TradeResponse])
-async def list_open_trades(current_user: CurrentUser = Depends(get_current_user)):
-    """Get user's open trades."""
+@router.get("/", response_model=List[TradeResponse])
+async def list_trades(
+    limit: int = 50,
+    offset: int = 0,
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Get user's trade history."""
     try:
         user = await sync_to_async(User.objects.get)(id=current_user.user_id)
-        trades = await sync_to_async(list)(get_open_trades(user))
+        trades = await sync_to_async(list)(get_user_trades(user, limit=limit + offset))
         
         return [
             TradeResponse(
@@ -699,15 +703,15 @@ async def list_open_trades(current_user: CurrentUser = Depends(get_current_user)
                 updated_at=trade.updated_at.isoformat(),
                 trade_type=getattr(trade, 'trade_type', None) or ('RISE_FALL' if trade.direction in ('RISE', 'FALL') else 'CALL_PUT'),
                 contract=getattr(trade, 'contract', None) or (trade.direction if trade.direction in ('RISE', 'FALL') else trade.contract_type),
-                signal_id=getattr(trade, 'signal_id', None),  # NEW: Include signal_id
+                signal_id=getattr(trade, 'signal_id', None),  # Ensure signal_id is included
             )
-            for trade in trades
+            for trade in trades[offset:]
         ]
         
     except User.DoesNotExist:
         raise HTTPException(status_code=404, detail="User not found")
     except Exception as e:
-        log_error("Failed to fetch open trades", exception=e)
+        log_error("Failed to fetch trades", exception=e)
         raise HTTPException(status_code=500, detail="Server error")
 
 
