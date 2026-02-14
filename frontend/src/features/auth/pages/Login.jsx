@@ -1,6 +1,5 @@
 import React from "react";
 import Particles from "react-tsparticles";
-import { LoginForm } from "../components/LoginForm.jsx";
 import { OAuthButton } from "../components/OAuthButton.jsx";
 import { SessionWarning } from "../components/SessionWarning.jsx";
 
@@ -9,7 +8,7 @@ export function Login() {
     <div className="relative min-h-screen bg-ink text-white overflow-hidden">
       {/* Interactive Particle Background */}
       <Particles
-        className="absolute inset-0 -z-10"
+        className="absolute inset-0 z-0"
         options={{
           fpsLimit: 60,
           background: { color: "#0a0a0a" },
@@ -45,7 +44,7 @@ export function Login() {
         }}
       />
 
-      <div className="mx-auto flex min-h-screen max-w-5xl items-center px-6 py-12">
+      <div className="relative z-10 mx-auto flex min-h-screen max-w-5xl items-center px-6 py-12">
         <div className="grid w-full gap-10 lg:grid-cols-[1.2fr_0.8fr]">
           {/* Left Panel */}
           <div>
@@ -68,9 +67,10 @@ export function Login() {
           {/* Right Panel */}
           <div className="flex flex-col justify-between rounded-2xl border border-white/10 bg-white/5 p-6 shadow-soft relative">
             <div>
-              <h2 className="text-lg font-semibold">Sign in</h2>
-              <p className="mt-2 text-sm text-white/60">Use your Nexus credentials.</p>
-              <LoginForm />
+              <h2 className="text-lg font-semibold">Connect with Deriv</h2>
+              <p className="mt-2 text-sm text-white/60">
+                Sign in using your Deriv account to continue.
+              </p>
               <div className="mt-6">
                 <OAuthButton />
               </div>
