@@ -34,12 +34,12 @@ export function AppLayout() {
       <Navbar onMenuClick={() => setSidebarOpen(!sidebarOpen)} sidebarOpen={sidebarOpen} />
 
       {/* Main Layout */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 min-h-0 overflow-hidden">
         {/* Sidebar */}
         <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
         {/* Main Content */}
-        <main className="flex-1 flex flex-col overflow-y-auto">
+        <main className="flex min-h-0 flex-1 flex-col overflow-y-auto">
           <div className="flex-1 px-4 py-6 sm:px-6 lg:px-8">
             <Outlet />
           </div>

@@ -61,8 +61,8 @@ export function Sidebar({ open, onClose }) {
 
       {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-72 sm:sticky sm:top-16 sm:h-[calc(100vh-4rem)]
-          border-r border-white/10 bg-slate/95 backdrop-blur-sm
+        className={`fixed inset-y-0 left-0 z-50 h-screen w-72 sm:sticky sm:top-16 sm:z-30 sm:h-[calc(100vh-4rem)] sm:shrink-0
+          border-r border-white/10 bg-slate/95 backdrop-blur-sm sm:overflow-hidden
           transition-transform duration-300 ease-out ${
             open ? "translate-x-0" : "-translate-x-full sm:translate-x-0"
           }`}

@@ -107,7 +107,7 @@ export function Navbar({ onMenuClick, sidebarOpen }) {
               </button>
 
               {openAccountMenu && accounts && accounts.length > 0 && (
-                <div className="absolute right-0 top-full mt-2 w-72 max-w-[calc(100vw-1rem)] rounded-xl border border-white/10 bg-slate/98 shadow-lg backdrop-blur-sm z-50">
+                <div className="absolute right-0 top-full z-50 mt-2 w-72 max-w-[calc(100vw-1rem)] rounded-xl border border-white/10 bg-slate-900 shadow-2xl ring-1 ring-black/40">
                   <div className="border-b border-white/10 px-4 py-3">
                     <p className="text-xs uppercase tracking-wider text-white/40">Switch Account</p>
                   </div>
@@ -161,7 +161,7 @@ export function Navbar({ onMenuClick, sidebarOpen }) {
               </button>
 
               {openUserMenu && (
-                <div className="absolute right-0 top-full mt-2 w-56 rounded-xl border border-white/10 bg-slate/98 shadow-lg backdrop-blur-sm overflow-hidden z-50">
+                <div className="absolute right-0 top-full z-50 mt-2 w-56 overflow-hidden rounded-xl border border-white/10 bg-slate-900 shadow-2xl ring-1 ring-black/40">
                   <div className="border-b border-white/10 px-4 py-3">
                     <p className="text-xs font-semibold text-white truncate">{displayName}</p>
                     <p className="text-xs text-white/40 truncate">{user?.email || user?.username}</p>

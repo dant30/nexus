@@ -110,7 +110,13 @@ export default function FloatingContact() {
       )}
 
       {/* Floating Container */}
-      <div className="fixed bottom-5 right-5 z-50 sm:bottom-6 sm:right-6">
+      <div
+        className="fixed z-[70]"
+        style={{
+          right: "max(0.75rem, env(safe-area-inset-right))",
+          bottom: "max(0.75rem, env(safe-area-inset-bottom))",
+        }}
+      >
         {/* Contact Menu */}
         <div
           className={`mb-3 flex flex-col items-end gap-2 transition-all duration-200 ${
