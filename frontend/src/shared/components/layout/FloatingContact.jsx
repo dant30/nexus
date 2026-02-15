@@ -12,7 +12,7 @@ import {
 const CONTACTS = [
   {
     label: "WhatsApp",
-    href: "https://wa.me/+254756379737",
+    href: "https://wa.me/+254756379735?text=Hello%20Nexus%20Support%2C%20I%20need%20assistance%20with...",
     icon: MessageCircle,
     className: "from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700",
     description: "Quick chat",
@@ -20,7 +20,7 @@ const CONTACTS = [
   },
   {
     label: "Call",
-    href: "tel:+254756379737",
+    href: "tel:+254756379735",
     icon: Phone,
     className: "from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700",
     description: "Voice call",
