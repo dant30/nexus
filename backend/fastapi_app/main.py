@@ -253,6 +253,13 @@ async def _save_bot_state_to_db(user_id: int, account_id: int, bot_state: Dict):
         account.bot_cooldown_seconds = bot_state.get("cooldown_seconds", 30)
         account.bot_max_trades_per_session = bot_state.get("max_trades_per_session", 0)
         account.bot_follow_signal = bot_state.get("follow_signal_direction", True)
+        account.bot_daily_loss_limit = bot_state.get("daily_loss_limit")
+        metadata = account.metadata if isinstance(account.metadata, dict) else {}
+        metadata["bot_risk"] = {
+            "daily_profit_target": float(bot_state.get("daily_profit_target") or 0),
+            "session_take_profit": float(bot_state.get("session_take_profit") or 0),
+        }
+        account.metadata = metadata
         
         await sync_to_async(account.save)()
         log_info("Bot state saved to database", user_id=user_id, account_id=account_id)
@@ -268,6 +275,9 @@ async def _load_bot_state_from_db(user_id: int, account_id: int) -> Optional[Dic
         if not account.bot_enabled:
             return None
         
+        metadata = account.metadata if isinstance(account.metadata, dict) else {}
+        bot_risk = metadata.get("bot_risk") if isinstance(metadata.get("bot_risk"), dict) else {}
+
         return {
             "enabled": account.bot_enabled,
             "symbol": account.bot_symbol,
@@ -281,10 +291,16 @@ async def _load_bot_state_from_db(user_id: int, account_id: int) -> Optional[Dic
             "cooldown_seconds": account.bot_cooldown_seconds or 30,
             "max_trades_per_session": account.bot_max_trades_per_session or 0,
             "follow_signal_direction": account.bot_follow_signal if hasattr(account, 'bot_follow_signal') else True,
+            "daily_loss_limit": float(account.bot_daily_loss_limit) if getattr(account, "bot_daily_loss_limit", None) else 0,
+            "daily_profit_target": float(bot_risk.get("daily_profit_target") or 0),
+            "session_take_profit": float(bot_risk.get("session_take_profit") or 0),
             "session_trades": 0,
+            "session_realized_profit": 0,
             "cooldown_until": 0,
             "last_trade_key": None,
             "recovery_level": 0,
+            "consecutive_losses": 0,
+            "consecutive_wins": 0,
         }
     except Exception as e:
         log_error("Failed to load bot state from DB", exception=e)
@@ -715,9 +731,29 @@ async def _maybe_execute_bot_trade(
     risk_manager = getattr(app.state, "risk_manager", None)
     if risk_manager is not None:
         try:
-            risk_assessment = await risk_manager.assess_trade(account, requested_stake)
+            risk_assessment = await risk_manager.assess_trade(
+                account,
+                requested_stake,
+                daily_loss_limit=Decimal(str(bot_state.get("daily_loss_limit") or 0)),
+                daily_profit_target=Decimal(str(bot_state.get("daily_profit_target") or 0)),
+                session_take_profit=Decimal(str(bot_state.get("session_take_profit") or 0)),
+                session_profit=Decimal(str(bot_state.get("session_realized_profit") or 0)),
+            )
             bot_state["recovery_level"] = int(risk_assessment.recovery_level or 0)
+            bot_state["consecutive_losses"] = int(risk_assessment.consecutive_losses or 0)
+            bot_state["consecutive_wins"] = int(risk_assessment.consecutive_wins or 0)
+            bot_state["daily_loss"] = float(risk_assessment.daily_loss or 0)
+            bot_state["daily_profit"] = float(risk_assessment.daily_profit or 0)
             app.state.bot_instances[connection_id] = bot_state
+            if risk_assessment.daily_loss_hit:
+                await _stop_bot(connection_id, reason="daily_loss_limit_reached")
+                return
+            if risk_assessment.daily_profit_hit:
+                await _stop_bot(connection_id, reason="daily_profit_target_reached")
+                return
+            if risk_assessment.session_take_profit_hit:
+                await _stop_bot(connection_id, reason="session_take_profit_reached")
+                return
             if not risk_assessment.is_approved:
                 log_info(
                     "Bot skipped trade: risk rejected",
@@ -779,6 +815,11 @@ async def _maybe_execute_bot_trade(
 
     # Update bot state on success
     if trade and trade.status != Trade.STATUS_FAILED:
+        if trade.status in {Trade.STATUS_WON, Trade.STATUS_LOST}:
+            bot_state["session_realized_profit"] = float(
+                Decimal(str(bot_state.get("session_realized_profit") or 0))
+                + Decimal(str(trade.profit or 0))
+            )
         bot_state["last_trade_key"] = trade_key
         bot_state["session_trades"] = int(bot_state.get("session_trades", 0)) + 1
         bot_state["cooldown_until"] = now + int(bot_state.get("cooldown_seconds", 30))
@@ -800,6 +841,12 @@ async def _maybe_execute_bot_trade(
                 "symbol": bot_state.get("symbol"),
                 "trade_type": execution_config["trade_type"],
                 "contract": execution_config["contract"],
+                "recovery_level": bot_state.get("recovery_level", 0),
+                "consecutive_losses": bot_state.get("consecutive_losses", 0),
+                "consecutive_wins": bot_state.get("consecutive_wins", 0),
+                "daily_loss": bot_state.get("daily_loss", 0),
+                "daily_profit": bot_state.get("daily_profit", 0),
+                "session_realized_profit": bot_state.get("session_realized_profit", 0),
             }
         )
     else:
@@ -1260,11 +1307,17 @@ async def handle_ws_message(websocket: WebSocket, user_id: int, account_id: int,
             "min_confidence": float(data.get("min_confidence") or 0.7),
             "cooldown_seconds": int(data.get("cooldown_seconds") or 30),
             "max_trades_per_session": int(data.get("max_trades_per_session") or 0),
+            "daily_loss_limit": float(data.get("daily_loss_limit") or 0),
+            "daily_profit_target": float(data.get("daily_profit_target") or 0),
+            "session_take_profit": float(data.get("session_take_profit") or 0),
             "session_trades": 0,
+            "session_realized_profit": 0,
             "cooldown_until": 0,
             "last_trade_key": None,
             "last_trade_time": None,
             "recovery_level": 0,
+            "consecutive_losses": 0,
+            "consecutive_wins": 0,
             "task": None,
             "created_at": time.time(),
         }
@@ -1348,6 +1401,9 @@ async def handle_ws_message(websocket: WebSocket, user_id: int, account_id: int,
                 "duration": duration_value,
                 "duration_unit": duration_unit,
                 "min_confidence": bot_state["min_confidence"],
+                "daily_loss_limit": bot_state["daily_loss_limit"],
+                "daily_profit_target": bot_state["daily_profit_target"],
+                "session_take_profit": bot_state["session_take_profit"],
             }
         )
         
@@ -1430,6 +1486,15 @@ async def handle_ws_message(websocket: WebSocket, user_id: int, account_id: int,
                     "follow_signal_direction": bot_state.get("follow_signal_direction", True),
                     "min_confidence": bot_state.get("min_confidence", 0.7),
                     "stake": bot_state.get("stake"),
+                    "daily_loss_limit": bot_state.get("daily_loss_limit", 0),
+                    "daily_profit_target": bot_state.get("daily_profit_target", 0),
+                    "session_take_profit": bot_state.get("session_take_profit", 0),
+                    "session_realized_profit": bot_state.get("session_realized_profit", 0),
+                    "recovery_level": bot_state.get("recovery_level", 0),
+                    "consecutive_losses": bot_state.get("consecutive_losses", 0),
+                    "consecutive_wins": bot_state.get("consecutive_wins", 0),
+                    "daily_loss": bot_state.get("daily_loss", 0),
+                    "daily_profit": bot_state.get("daily_profit", 0),
                 }
             )
         else:

@@ -10,6 +10,8 @@ const DEFAULT_TRADING_PREFERENCES = {
   minSignalConfidence: 0.7,
   cooldownSeconds: 10,
   maxTradesPerSession: 5,
+  dailyProfitTarget: 0,
+  sessionTakeProfit: 0,
   timeframeSeconds: 60,
   signalsTimeframeSeconds: 0,
 };

@@ -14,6 +14,7 @@ import { useSignals } from "../hooks/useSignals.js";
 import { useMarketData } from "../hooks/useMarketData.js";
 import { useAccountContext } from "../../accounts/contexts/AccountContext.jsx";
 import { useWebSocket } from "../../../providers/WSProvider.jsx";
+import { getRiskSettings, getTradingPreferences } from "../../settings/services/settingsService.js";
 
 const toNumber = (value, fallback = 0) => {
   const n = Number(value);
@@ -47,6 +48,8 @@ export function AutoTrading() {
   const [market, setMarket] = useState("R_50");
   const [stake, setStake] = useState(5);
   const [dailyLimit, setDailyLimit] = useState(50);
+  const [dailyProfitTarget, setDailyProfitTarget] = useState(0);
+  const [sessionTakeProfit, setSessionTakeProfit] = useState(0);
   const [durationValue, setDurationValue] = useState(1);
   const [durationUnit, setDurationUnit] = useState("ticks");
   const [cooldownSeconds, setCooldownSeconds] = useState(10);
@@ -57,10 +60,36 @@ export function AutoTrading() {
   const [cooldownUntil, setCooldownUntil] = useState(0);
   const [recoveryLevel, setRecoveryLevel] = useState(0);
   const [consecutiveLosses, setConsecutiveLosses] = useState(0);
+  const [dailyLoss, setDailyLoss] = useState(0);
+  const [dailyProfit, setDailyProfit] = useState(0);
+  const [sessionRealizedProfit, setSessionRealizedProfit] = useState(0);
   const [loading, setLoading] = useState(false);
 
   const { signals } = useSignals();
   useMarketData(market, timeframeSeconds);
+
+  useEffect(() => {
+    let mounted = true;
+    const loadDefaults = async () => {
+      try {
+        const [risk, trading] = await Promise.all([getRiskSettings(), getTradingPreferences()]);
+        if (!mounted) return;
+        setStake(Number(trading?.defaultStake || 5));
+        setDailyLimit(Number(risk?.dailyLossLimit || 0));
+        setDailyProfitTarget(Number(trading?.dailyProfitTarget || 0));
+        setSessionTakeProfit(Number(trading?.sessionTakeProfit || 0));
+        setCooldownSeconds(Number(trading?.cooldownSeconds || 10));
+        setMaxTradesPerSession(Number(trading?.maxTradesPerSession || 5));
+        setMinConfidence(Number(trading?.minSignalConfidence || TRADING.MIN_SIGNAL_CONFIDENCE));
+      } catch (_) {
+        // Keep built-in defaults when settings are unavailable.
+      }
+    };
+    loadDefaults();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (tradeType === "CALL_PUT" && ["ticks", "seconds"].includes(durationUnit)) {
@@ -85,6 +114,15 @@ export function AutoTrading() {
       }
       if (typeof status.consecutive_losses === "number") {
         setConsecutiveLosses(status.consecutive_losses);
+      }
+      if (typeof status.daily_loss === "number") {
+        setDailyLoss(status.daily_loss);
+      }
+      if (typeof status.daily_profit === "number") {
+        setDailyProfit(status.daily_profit);
+      }
+      if (typeof status.session_realized_profit === "number") {
+        setSessionRealizedProfit(status.session_realized_profit);
       }
       if (status.state === "stopped") {
         setRunning(false);
@@ -146,6 +184,8 @@ export function AutoTrading() {
         cooldown_seconds: normalizedCooldownSeconds,
         max_trades_per_session: normalizedMaxTradesPerSession,
         daily_loss_limit: Math.max(0, toNumber(dailyLimit, 0)),
+        daily_profit_target: Math.max(0, toNumber(dailyProfitTarget, 0)),
+        session_take_profit: Math.max(0, toNumber(sessionTakeProfit, 0)),
       });
       setRunning(true);
       setLastEvent({
@@ -198,6 +238,32 @@ export function AutoTrading() {
           </div>
           <StakeSettings value={stake} onChange={setStake} />
           <RiskLimits value={dailyLimit} onChange={setDailyLimit} />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-white/70">
+                Daily Profit Target
+              </label>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                value={dailyProfitTarget}
+                onChange={(event) => setDailyProfitTarget(event.target.value)}
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-white/70">
+                Session Take-Profit
+              </label>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                value={sessionTakeProfit}
+                onChange={(event) => setSessionTakeProfit(event.target.value)}
+              />
+            </div>
+          </div>
           <div>
             <label className="mb-1 block text-xs font-semibold text-white/70">Trade Type</label>
             <Select value={tradeType} onChange={(event) => setTradeType(event.target.value)}>
@@ -260,6 +326,9 @@ export function AutoTrading() {
             <p>Cooldown remaining: {cooldownRemainingSeconds}s</p>
             <p>Direction mode: Follow signal direction</p>
             <p>Contract mode: {tradeType === "CALL_PUT" ? "Call/Put" : "Rise/Fall"}</p>
+            <p>Daily realized loss: {toNumber(dailyLoss, 0).toFixed(2)}</p>
+            <p>Daily realized profit: {toNumber(dailyProfit, 0).toFixed(2)}</p>
+            <p>Session realized profit: {toNumber(sessionRealizedProfit, 0).toFixed(2)}</p>
           </div>
 
           <TradeButton

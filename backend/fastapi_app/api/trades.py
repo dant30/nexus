@@ -575,6 +575,13 @@ async def _execute_trade_internal(
                             str(transaction_id),
                         )
                         await sync_to_async(trade.refresh_from_db)()
+                        risk_manager = getattr(app.state, "risk_manager", None)
+                        if risk_manager and trade.status in [Trade.STATUS_WON, Trade.STATUS_LOST]:
+                            await risk_manager.record_trade_outcome(
+                                account.id,
+                                trade.status == Trade.STATUS_WON,
+                                trade.profit or Decimal("0"),
+                            )
                         log_info(
                             "Trade settled from contract polling",
                             trade_id=trade.id,

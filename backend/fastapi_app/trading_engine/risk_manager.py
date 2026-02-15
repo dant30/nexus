@@ -2,7 +2,7 @@
 Professional risk management engine with comprehensive safeguards.
 """
 from decimal import Decimal
-from typing import Optional, List, Dict, Tuple
+from typing import Optional, List, Dict
 from dataclasses import dataclass, field
 from datetime import timedelta
 
@@ -26,6 +26,16 @@ class RiskAssessment:
     recommended_stake: Optional[Decimal] = None
     recovery_stake: Optional[Decimal] = None
     recovery_level: int = 0
+    consecutive_losses: int = 0
+    consecutive_wins: int = 0
+    daily_loss: Decimal = Decimal("0")
+    daily_profit: Decimal = Decimal("0")
+    daily_loss_limit: Decimal = Decimal("0")
+    daily_profit_target: Decimal = Decimal("0")
+    session_profit: Decimal = Decimal("0")
+    daily_loss_hit: bool = False
+    daily_profit_hit: bool = False
+    session_take_profit_hit: bool = False
 
 
 class RiskManager:
@@ -46,6 +56,7 @@ class RiskManager:
     MAX_STAKE = Decimal("50.00")  # Reduced for safety
     MAX_STAKE_PERCENT_OF_BALANCE = Decimal("5")  # 5% max per trade
     MAX_DAILY_LOSS_PERCENT = Decimal("10")  # 10% daily loss limit
+    MAX_DAILY_PROFIT_PERCENT = Decimal("15")  # 15% daily target (can be disabled via override=0)
     MAX_CONSECUTIVE_LOSSES = 7
     MAX_TRADES_PER_HOUR = 120
     FIBONACCI_SEQUENCE = [
@@ -63,6 +74,7 @@ class RiskManager:
         min_stake: Optional[Decimal] = None,
         max_stake: Optional[Decimal] = None,
         max_daily_loss_percent: Optional[Decimal] = None,
+        max_daily_profit_percent: Optional[Decimal] = None,
         max_consecutive_losses: Optional[int] = None,
         fibonacci_sequence: Optional[List[Decimal]] = None,
     ):
@@ -70,13 +82,21 @@ class RiskManager:
         self.min_stake = min_stake or self.MIN_STAKE
         self.max_stake = max_stake or self.MAX_STAKE
         self.max_daily_loss_percent = max_daily_loss_percent or self.MAX_DAILY_LOSS_PERCENT
+        self.max_daily_profit_percent = (
+            max_daily_profit_percent if max_daily_profit_percent is not None else self.MAX_DAILY_PROFIT_PERCENT
+        )
         self.max_consecutive_losses = max_consecutive_losses or self.MAX_CONSECUTIVE_LOSSES
         self.fibonacci_sequence = fibonacci_sequence or self.FIBONACCI_SEQUENCE
+        self._outcome_cache: Dict[int, Dict[str, Decimal | int]] = {}
     
     async def assess_trade(
         self,
         account: Account,
         stake: Decimal,
+        daily_loss_limit: Optional[Decimal] = None,
+        daily_profit_target: Optional[Decimal] = None,
+        session_take_profit: Optional[Decimal] = None,
+        session_profit: Optional[Decimal] = None,
     ) -> RiskAssessment:
         """
         Comprehensive trade risk assessment.
@@ -87,6 +107,7 @@ class RiskManager:
         issues = []
         risk_level = "LOW"
         consecutive_losses = await self._count_consecutive_losses(account)
+        consecutive_wins = await self._count_consecutive_wins(account)
         recovery_level = min(consecutive_losses, len(self.fibonacci_sequence) - 1)
         recovery_stake = None
         check_stake = stake
@@ -130,16 +151,56 @@ class RiskManager:
             issues.append(f"Stake exceeds balance ({float(account.balance)})")
             risk_level = "CRITICAL"
         
-        # 5. DAILY LOSS LIMIT CHECK
-        daily_loss = await self._calculate_daily_loss(account)
-        max_allowed_loss = account.balance * (self.max_daily_loss_percent / Decimal("100"))
-        
-        if daily_loss >= max_allowed_loss:
+        # 5. DAILY LOSS/PROFIT LIMIT CHECKS
+        daily_net_profit = await self._calculate_daily_net_profit(account)
+        # Recovery semantics: losses are offset by wins. If net PnL recovers >= 0, daily loss becomes 0.
+        daily_loss = abs(daily_net_profit) if daily_net_profit < 0 else Decimal("0")
+        daily_profit = daily_net_profit if daily_net_profit > 0 else Decimal("0")
+
+        max_allowed_loss = (
+            Decimal(str(daily_loss_limit)).quantize(Decimal("0.01"))
+            if daily_loss_limit is not None
+            else (account.balance * (self.max_daily_loss_percent / Decimal("100"))).quantize(Decimal("0.01"))
+        )
+        max_allowed_profit = (
+            Decimal(str(daily_profit_target)).quantize(Decimal("0.01"))
+            if daily_profit_target is not None
+            else (account.balance * (self.max_daily_profit_percent / Decimal("100"))).quantize(Decimal("0.01"))
+        )
+        current_session_profit = (
+            Decimal(str(session_profit)).quantize(Decimal("0.01"))
+            if session_profit is not None
+            else Decimal("0")
+        )
+        session_take_profit_target = (
+            Decimal(str(session_take_profit)).quantize(Decimal("0.01"))
+            if session_take_profit is not None and Decimal(str(session_take_profit)) > 0
+            else None
+        )
+        daily_loss_hit = daily_loss >= max_allowed_loss if max_allowed_loss > 0 else False
+        daily_profit_hit = daily_profit >= max_allowed_profit if max_allowed_profit > 0 else False
+        session_take_profit_hit = (
+            current_session_profit >= session_take_profit_target
+            if session_take_profit_target is not None
+            else False
+        )
+
+        if daily_loss_hit:
             issues.append(f"Daily loss limit reached: {float(daily_loss)}/{float(max_allowed_loss)}")
             risk_level = "CRITICAL"
-        elif daily_loss > max_allowed_loss * Decimal("0.8"):
+        elif max_allowed_loss > 0 and daily_loss > max_allowed_loss * Decimal("0.8"):
             issues.append(f"Approaching daily loss limit: {float(daily_loss)}/{float(max_allowed_loss)}")
             risk_level = "HIGH" if risk_level != "CRITICAL" else risk_level
+
+        if daily_profit_hit:
+            issues.append(f"Daily profit target reached: {float(daily_profit)}/{float(max_allowed_profit)}")
+            risk_level = "MEDIUM" if risk_level not in ["HIGH", "CRITICAL"] else risk_level
+
+        if session_take_profit_hit:
+            issues.append(
+                f"Session take-profit reached: {float(current_session_profit)}/{float(session_take_profit_target)}"
+            )
+            risk_level = "MEDIUM" if risk_level not in ["HIGH", "CRITICAL"] else risk_level
         
         # 6. CONSECUTIVE LOSS CHECK
         if consecutive_losses >= self.max_consecutive_losses:
@@ -183,6 +244,15 @@ class RiskManager:
             risk_level=risk_level,
             recovery_level=recovery_level,
             consecutive_losses=consecutive_losses,
+            consecutive_wins=consecutive_wins,
+            daily_loss=float(daily_loss),
+            daily_profit=float(daily_profit),
+            daily_loss_limit=float(max_allowed_loss),
+            daily_profit_target=float(max_allowed_profit),
+            session_profit=float(current_session_profit),
+            daily_loss_hit=daily_loss_hit,
+            daily_profit_hit=daily_profit_hit,
+            session_take_profit_hit=session_take_profit_hit,
             issue_count=len(issues),
         )
 
@@ -205,7 +275,25 @@ class RiskManager:
             recommended_stake=recommended_stake,
             recovery_stake=recovery_stake,
             recovery_level=recovery_level,
+            consecutive_losses=consecutive_losses,
+            consecutive_wins=consecutive_wins,
+            daily_loss=daily_loss,
+            daily_profit=daily_profit,
+            daily_loss_limit=max_allowed_loss,
+            daily_profit_target=max_allowed_profit,
+            session_profit=current_session_profit,
+            daily_loss_hit=daily_loss_hit,
+            daily_profit_hit=daily_profit_hit,
+            session_take_profit_hit=session_take_profit_hit,
         )
+
+    async def record_trade_outcome(self, account_id: int, was_win: bool, profit: Decimal) -> None:
+        """Record recent trade outcome for diagnostics and future adaptive controls."""
+        bucket = self._outcome_cache.get(account_id, {"wins": 0, "losses": 0, "net": Decimal("0")})
+        bucket["wins"] = int(bucket.get("wins", 0)) + (1 if was_win else 0)
+        bucket["losses"] = int(bucket.get("losses", 0)) + (0 if was_win else 1)
+        bucket["net"] = Decimal(str(bucket.get("net", Decimal("0")))) + Decimal(str(profit or 0))
+        self._outcome_cache[account_id] = bucket
     
     def _calculate_recommended_stake(self, account: Account) -> Decimal:
         """Calculate recommended stake based on account balance."""
@@ -220,21 +308,21 @@ class RiskManager:
         return recommended.quantize(Decimal("0.01"))
     
     @sync_to_async
-    def _calculate_daily_loss(self, account: Account) -> Decimal:
-        """Calculate total realized loss for today."""
+    def _calculate_daily_net_profit(self, account: Account) -> Decimal:
+        """Calculate realized net profit for today (wins - losses)."""
         today = timezone.now().date()
         trades = Trade.objects.filter(
             account=account,
             created_at__date=today,
-            status=Trade.STATUS_LOST,
+            status__in=[Trade.STATUS_WON, Trade.STATUS_LOST, Trade.STATUS_FAILED],
         )
         
-        total_loss = Decimal("0")
+        total = Decimal("0")
         for trade in trades:
-            if trade.profit and trade.profit < 0:
-                total_loss += abs(trade.profit)
+            if trade.profit:
+                total += trade.profit
         
-        return total_loss
+        return total
     
     @sync_to_async
     def _count_consecutive_losses(self, account: Account) -> int:
@@ -251,6 +339,23 @@ class RiskManager:
             else:
                 break
         
+        return consecutive
+
+    @sync_to_async
+    def _count_consecutive_wins(self, account: Account) -> int:
+        """Count current consecutive winning trades."""
+        recent_trades = Trade.objects.filter(
+            account=account,
+            status__in=[Trade.STATUS_WON, Trade.STATUS_LOST, Trade.STATUS_FAILED],
+        ).order_by("-created_at")[:10]
+
+        consecutive = 0
+        for trade in recent_trades:
+            if trade.status == Trade.STATUS_WON:
+                consecutive += 1
+            else:
+                break
+
         return consecutive
     
     @sync_to_async
