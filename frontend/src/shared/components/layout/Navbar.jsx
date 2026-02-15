@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  Bell,
   ChevronDown,
   LogOut,
   Menu,
@@ -14,6 +13,7 @@ import { useAuth } from "../../../features/auth/contexts/AuthContext.jsx";
 import { useAuthActions } from "../../../features/auth/hooks/useAuth.js";
 import { useBalance } from "../../../features/accounts/hooks/useBalance.js";
 import { useAccountContext } from "../../../features/accounts/contexts/AccountContext.jsx";
+import { NotificationBell } from "../../../features/notifications/components/NotificationBell.jsx";
 
 export function Navbar({ onMenuClick, sidebarOpen }) {
   const { user, isAuthenticated } = useAuth();
@@ -24,7 +24,6 @@ export function Navbar({ onMenuClick, sidebarOpen }) {
 
   const [openUserMenu, setOpenUserMenu] = useState(false);
   const [openAccountMenu, setOpenAccountMenu] = useState(false);
-  const [notificationCount, setNotificationCount] = useState(0);
   const userMenuRef = useRef(null);
   const accountMenuRef = useRef(null);
 
@@ -105,17 +104,7 @@ export function Navbar({ onMenuClick, sidebarOpen }) {
         {isAuthenticated && (
           <div className="flex items-center gap-2 sm:gap-4">
             {/* Notifications */}
-            <button
-              className="relative inline-flex rounded-lg border border-white/10 p-2 text-white/70 transition-all hover:border-accent/40 hover:text-accent hover:bg-accent/5"
-              aria-label="Notifications"
-            >
-              <Bell size={18} />
-              {notificationCount > 0 && (
-                <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-danger text-xs font-bold text-white">
-                  {notificationCount > 9 ? "9+" : notificationCount}
-                </span>
-              )}
-            </button>
+            <NotificationBell />
 
             {/* Account Switcher */}
             <div className="relative hidden sm:block" ref={accountMenuRef}>

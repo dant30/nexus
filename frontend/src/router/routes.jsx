@@ -5,6 +5,7 @@ import { OAuthRedirect } from "../features/auth/pages/OAuthRedirect.jsx";
 import { UserDashboard } from "../features/dashboard/pages/UserDashboard.jsx";
 import { TradingDashboard } from "../features/dashboard/pages/TradingDashboard.jsx";
 import { AdminDashboard } from "../features/dashboard/pages/AdminDashboard.jsx";
+import { NotificationCenter } from "../features/notifications/pages/NotificationCenter.jsx";
 
 export const publicRoutes = [
   { path: "/login", element: <Login /> },
@@ -30,6 +31,12 @@ export const protectedRoutes = [
     label: "Admin",
     meta: "Ops",
     element: <AdminDashboard />,
+  },
+  {
+    path: "/dashboard/notifications",
+    label: "Notifications",
+    meta: "Inbox",
+    element: <NotificationCenter />,
   },
 ];
 

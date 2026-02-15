@@ -3,6 +3,7 @@ import { Outlet, useLocation } from "react-router-dom";
 import { Navbar } from "./Navbar.jsx";
 import { Sidebar } from "./Sidebar.jsx";
 import { Footer } from "./Footer.jsx";
+import { NotificationToast } from "../../../features/notifications/components/NotificationToast.jsx";
 
 export function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -27,6 +28,7 @@ export function AppLayout() {
 
   return (
     <div className="flex min-h-screen flex-col bg-ink text-white">
+      <NotificationToast />
       {/* Sticky Navbar */}
       <Navbar onMenuClick={() => setSidebarOpen(!sidebarOpen)} sidebarOpen={sidebarOpen} />
 
