@@ -7,6 +7,7 @@ import { UserDashboard } from "../features/dashboard/pages/UserDashboard.jsx";
 import { TradingDashboard } from "../features/dashboard/pages/TradingDashboard.jsx";
 import { AdminDashboard } from "../features/dashboard/pages/AdminDashboard.jsx";
 import { NotificationCenter } from "../features/notifications/pages/NotificationCenter.jsx";
+import { ReferralDashboard } from "../features/referrals/pages/ReferralDashboard.jsx";
 import {
   ProfileSettings,
   SettingsHome,
@@ -45,6 +46,12 @@ export const protectedRoutes = [
     label: "Notifications",
     meta: "Inbox",
     element: <NotificationCenter />,
+  },
+  {
+    path: "/dashboard/referrals",
+    label: "Referrals",
+    meta: "Growth",
+    element: <ReferralDashboard />,
   },
   {
     path: "/settings",
