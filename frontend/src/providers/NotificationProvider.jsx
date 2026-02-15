@@ -1,23 +1,21 @@
-import React, { createContext, useContext, useState } from "react";
+import React from "react";
+import { NotificationProvider as CanonicalNotificationProvider } from "../features/notifications/contexts/NotificationContext.jsx";
+import { useNotifications } from "../features/notifications/hooks/useNotifications.js";
 
-const NotificationContext = createContext(null);
-
+/**
+ * Compatibility shim:
+ * Keeps legacy imports from `providers/NotificationProvider` working while
+ * routing everything to the canonical notifications feature implementation.
+ */
 export function NotificationProvider({ children }) {
-  const [toasts, setToasts] = useState([]);
-
-  const push = (msg, type = "info") => {
-    const id = Date.now();
-    setToasts((t) => [...t, { id, msg, type }]);
-    setTimeout(() => {
-      setToasts((t) => t.filter((x) => x.id !== id));
-    }, 3000);
-  };
-
-  return (
-    <NotificationContext.Provider value={{ push, toasts }}>
-      {children}
-    </NotificationContext.Provider>
-  );
+  return <CanonicalNotificationProvider>{children}</CanonicalNotificationProvider>;
 }
 
-export const useNotify = () => useContext(NotificationContext);
+export const useNotify = () => {
+  const { pushToast, toasts, removeToast } = useNotifications();
+  return {
+    push: (msg, type = "info") => pushToast({ message: msg, level: type }),
+    toasts,
+    remove: removeToast,
+  };
+};

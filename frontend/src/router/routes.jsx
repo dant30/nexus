@@ -6,6 +6,12 @@ import { UserDashboard } from "../features/dashboard/pages/UserDashboard.jsx";
 import { TradingDashboard } from "../features/dashboard/pages/TradingDashboard.jsx";
 import { AdminDashboard } from "../features/dashboard/pages/AdminDashboard.jsx";
 import { NotificationCenter } from "../features/notifications/pages/NotificationCenter.jsx";
+import {
+  ProfileSettings,
+  TradingSettings,
+  RiskSettings,
+  BillingSettings,
+} from "../features/settings/index.js";
 
 export const publicRoutes = [
   { path: "/login", element: <Login /> },
@@ -38,10 +44,47 @@ export const protectedRoutes = [
     meta: "Inbox",
     element: <NotificationCenter />,
   },
+  {
+    path: "/settings",
+    label: "Settings",
+    meta: "Profile",
+    element: <ProfileSettings />,
+    hideInNav: true,
+  },
+  {
+    path: "/settings/profile",
+    label: "Profile Settings",
+    meta: "Profile",
+    element: <ProfileSettings />,
+    hideInNav: true,
+  },
+  {
+    path: "/settings/trading",
+    label: "Trading Settings",
+    meta: "Trading",
+    element: <TradingSettings />,
+    hideInNav: true,
+  },
+  {
+    path: "/settings/risk",
+    label: "Risk Settings",
+    meta: "Risk",
+    element: <RiskSettings />,
+    hideInNav: true,
+  },
+  {
+    path: "/settings/billing",
+    label: "Billing Settings",
+    meta: "Billing",
+    element: <BillingSettings />,
+    hideInNav: true,
+  },
 ];
 
-export const navigationRoutes = protectedRoutes.map(({ path, label, meta }) => ({
-  path,
-  label,
-  meta,
-}));
+export const navigationRoutes = protectedRoutes
+  .filter((route) => !route.hideInNav)
+  .map(({ path, label, meta }) => ({
+    path,
+    label,
+    meta,
+  }));
