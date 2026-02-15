@@ -36,8 +36,8 @@ class RiskManager:
     - Minimum/Maximum stake limits
     - Account balance sufficiency
     - Daily loss limits (10% of balance)
-    - Consecutive loss limits (5 max)
-    - Hourly trade frequency (60 max)
+    - Consecutive loss limits (7 max)
+    - Hourly trade frequency (120 max)
     - Position sizing based on account balance
     """
     
@@ -46,8 +46,8 @@ class RiskManager:
     MAX_STAKE = Decimal("50.00")  # Reduced for safety
     MAX_STAKE_PERCENT_OF_BALANCE = Decimal("5")  # 5% max per trade
     MAX_DAILY_LOSS_PERCENT = Decimal("10")  # 10% daily loss limit
-    MAX_CONSECUTIVE_LOSSES = 5
-    MAX_TRADES_PER_HOUR = 60
+    MAX_CONSECUTIVE_LOSSES = 7
+    MAX_TRADES_PER_HOUR = 120
     FIBONACCI_SEQUENCE = [
         Decimal("1.0"),
         Decimal("1.5"),

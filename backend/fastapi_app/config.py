@@ -85,7 +85,7 @@ class Settings:
     FIBONACCI_SEQUENCE: List[float] = [1.0, 1.5, 2.25, 3.375, 5.0, 7.5, 10.0]
     
     # Signal Configuration
-    MIN_SIGNAL_CONFIDENCE: float = 0.60
+    MIN_SIGNAL_CONFIDENCE: float = 0.70
     MIN_CONSENSUS_SIGNALS: int = 2
     
     # Logging
