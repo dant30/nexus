@@ -10,10 +10,12 @@ export function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
 
+  // Close sidebar on navigation (mobile)
   useEffect(() => {
     setSidebarOpen(false);
   }, [location.pathname]);
 
+  // Close sidebar on resize to desktop
   useEffect(() => {
     const handleResize = () => {
       if (window.innerWidth >= 640) {
@@ -30,22 +32,23 @@ export function AppLayout() {
       <NotificationToast />
       <FloatingContact />
 
-      {/* Navbar */}
+      {/* Navbar - Fixed */}
       <Navbar
         onMenuClick={() => setSidebarOpen((prev) => !prev)}
         sidebarOpen={sidebarOpen}
       />
 
-      {/* Layout */}
+      {/* Main Layout - Sidebar + Content */}
       <div className="flex flex-1 overflow-hidden">
         <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-        {/* Main Content */}
+        {/* Main Content Area - Scrollable */}
         <main className="flex-1 overflow-y-auto bg-ink">
-          <div className="min-h-full px-3 py-5 sm:px-5 lg:px-6">
+          <div className="mx-auto w-full max-w-7xl px-2 py-4 sm:px-4 lg:px-6">
             <Outlet />
           </div>
 
+          {/* Footer inside scroll area */}
           <Footer />
         </main>
       </div>
