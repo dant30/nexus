@@ -1,4 +1,5 @@
 import React from "react";
+import { Navigate } from "react-router-dom";
 import { Login } from "../features/auth/pages/Login.jsx";
 import { OAuthCallback } from "../features/auth/pages/OAuthCallback.jsx";
 import { OAuthRedirect } from "../features/auth/pages/OAuthRedirect.jsx";
@@ -8,6 +9,7 @@ import { AdminDashboard } from "../features/dashboard/pages/AdminDashboard.jsx";
 import { NotificationCenter } from "../features/notifications/pages/NotificationCenter.jsx";
 import {
   ProfileSettings,
+  SettingsHome,
   TradingSettings,
   RiskSettings,
   BillingSettings,
@@ -48,7 +50,14 @@ export const protectedRoutes = [
     path: "/settings",
     label: "Settings",
     meta: "Profile",
-    element: <ProfileSettings />,
+    element: <Navigate to="/settings/profile" replace />,
+    hideInNav: true,
+  },
+  {
+    path: "/settings/home",
+    label: "Settings Home",
+    meta: "Home",
+    element: <SettingsHome />,
     hideInNav: true,
   },
   {
