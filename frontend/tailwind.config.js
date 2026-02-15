@@ -1,11 +1,10 @@
-﻿
-/** @type {import('tailwindcss').Config} */
-import forms from "@tailwindcss/forms";
-import typography from "@tailwindcss/typography";
-import aspectRatio from "@tailwindcss/aspect-ratio";
-import plugin from "tailwindcss/plugin";
+﻿/** @type {import('tailwindcss').Config} */
+const forms = require("@tailwindcss/forms");
+const typography = require("@tailwindcss/typography");
+const aspectRatio = require("@tailwindcss/aspect-ratio");
+const plugin = require("tailwindcss/plugin");
 
-export default {
+module.exports = {
   content: ["./index.html", "./src/**/*.{js,jsx,ts,tsx}"],
   darkMode: "class",
 
@@ -75,7 +74,7 @@ export default {
       },
 
       transitionTimingFunction: {
-        "spring": "cubic-bezier(.22,.9,.27,1)",
+        spring: "cubic-bezier(.22,.9,.27,1)",
       },
 
       keyframes: {
@@ -103,17 +102,22 @@ export default {
     },
   },
 
-  plugins: [forms, typography, aspectRatio, plugin(function ({ addUtilities }) {
-    addUtilities({
-      ".backdrop-soft": {
-        "backdrop-filter": "blur(6px)",
-        "-webkit-backdrop-filter": "blur(6px)",
-      },
-      ".text-gradient": {
-        "background-clip": "text",
-        "-webkit-background-clip": "text",
-        color: "transparent",
-      },
-    });
-  })],
+  plugins: [
+    forms,
+    typography,
+    aspectRatio,
+    plugin(function ({ addUtilities }) {
+      addUtilities({
+        ".backdrop-soft": {
+          "backdrop-filter": "blur(6px)",
+          "-webkit-backdrop-filter": "blur(6px)",
+        },
+        ".text-gradient": {
+          "background-clip": "text",
+          "-webkit-background-clip": "text",
+          color: "transparent",
+        },
+      });
+    }),
+  ],
 };
