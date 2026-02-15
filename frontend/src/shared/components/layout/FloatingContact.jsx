@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Mail,
   MessageCircle,
-  MessageSquare,
   Phone,
   Send,
   Sparkles,
@@ -78,7 +77,7 @@ export default function FloatingContact() {
   }, [open, clearTimers]);
 
   useEffect(() => {
-    if (!open) return undefined;
+    if (!open) return;
     const onKeyDown = (event) => {
       if (event.key === "Escape") setOpen(false);
     };
@@ -100,19 +99,24 @@ export default function FloatingContact() {
 
   return (
     <>
-      {open ? (
+      {/* Backdrop */}
+      {open && (
         <button
           type="button"
           aria-label="Close contacts"
-          className="fixed inset-0 z-40 bg-black/30 backdrop-blur-[1px]"
+          className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm"
           onClick={() => setOpen(false)}
         />
-      ) : null}
+      )}
 
+      {/* Floating Container */}
       <div className="fixed bottom-5 right-5 z-50 sm:bottom-6 sm:right-6">
+        {/* Contact Menu */}
         <div
           className={`mb-3 flex flex-col items-end gap-2 transition-all duration-200 ${
-            open ? "pointer-events-auto opacity-100 translate-y-0" : "pointer-events-none opacity-0 translate-y-2"
+            open
+              ? "pointer-events-auto opacity-100 translate-y-0"
+              : "pointer-events-none opacity-0 translate-y-2"
           }`}
         >
           {CONTACTS.map((item) => (
@@ -122,9 +126,9 @@ export default function FloatingContact() {
               target={item.external ? "_blank" : undefined}
               rel={item.external ? "noopener noreferrer" : undefined}
               onClick={onContactClick}
-              className={`group flex min-w-[12rem] items-center gap-3 rounded-xl border border-white/10 bg-gradient-to-br px-4 py-3 text-white shadow-2xl transition hover:-translate-x-1 ${item.className}`}
+              className={`group flex min-w-[12rem] items-center gap-3 rounded-lg border border-white/10 bg-gradient-to-br px-4 py-3 text-white shadow-lg transition hover:-translate-x-1 ${item.className}`}
             >
-              <div className="rounded-lg bg-white/20 p-2">
+              <div className="rounded-lg bg-white/20 p-2 flex-shrink-0">
                 <item.icon size={18} />
               </div>
               <div className="min-w-0">
@@ -135,22 +139,23 @@ export default function FloatingContact() {
           ))}
         </div>
 
+        {/* Toggle Button */}
         <button
           type="button"
           onClick={onToggle}
           aria-expanded={open}
           aria-label="Contact support"
-          className={`relative flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br text-white shadow-2xl transition hover:scale-105 active:scale-95 sm:h-16 sm:w-16 ${
+          className={`relative flex h-14 w-14 items-center justify-center rounded-lg text-white shadow-lg transition hover:scale-105 active:scale-95 sm:h-16 sm:w-16 bg-gradient-to-br ${
             open ? "from-cyan-600 to-cyan-800" : "from-cyan-500 to-cyan-700"
           }`}
         >
-          {idlePulse && !open ? (
+          {idlePulse && !open && (
             <>
-              <span className="absolute inset-0 animate-ping rounded-2xl border border-cyan-300/50" />
+              <span className="absolute inset-0 animate-ping rounded-lg border border-cyan-300/50" />
               <Sparkles size={12} className="absolute -right-1 -top-1 text-cyan-200" />
             </>
-          ) : null}
-          {open ? <X size={24} /> : <MessageSquare size={24} />}
+          )}
+          {open ? <X size={24} /> : <MessageCircle size={24} />}
         </button>
       </div>
     </>
