@@ -46,14 +46,14 @@ export function AutoTrading() {
   const { sendMessage, connected, onMessage } = useWebSocket();
 
   const [market, setMarket] = useState("R_50");
-  const [stake, setStake] = useState(5);
+  const [stake, setStake] = useState(1);
   const [dailyLimit, setDailyLimit] = useState(50);
   const [dailyProfitTarget, setDailyProfitTarget] = useState(0);
   const [sessionTakeProfit, setSessionTakeProfit] = useState(0);
   const [durationValue, setDurationValue] = useState(1);
   const [durationUnit, setDurationUnit] = useState("ticks");
   const [cooldownSeconds, setCooldownSeconds] = useState(10);
-  const [maxTradesPerSession, setMaxTradesPerSession] = useState(5);
+  const [maxTradesPerSession, setMaxTradesPerSession] = useState(120);
   const [minConfidence, setMinConfidence] = useState(TRADING.MIN_SIGNAL_CONFIDENCE);
   const [tradeType, setTradeType] = useState("RISE_FALL");
   const [sessionTrades, setSessionTrades] = useState(0);
@@ -74,12 +74,12 @@ export function AutoTrading() {
       try {
         const [risk, trading] = await Promise.all([getRiskSettings(), getTradingPreferences()]);
         if (!mounted) return;
-        setStake(Number(trading?.defaultStake || 5));
+        setStake(Number(trading?.defaultStake || 1));
         setDailyLimit(Number(risk?.dailyLossLimit || 0));
         setDailyProfitTarget(Number(trading?.dailyProfitTarget || 0));
         setSessionTakeProfit(Number(trading?.sessionTakeProfit || 0));
         setCooldownSeconds(Number(trading?.cooldownSeconds || 10));
-        setMaxTradesPerSession(Number(trading?.maxTradesPerSession || 5));
+        setMaxTradesPerSession(Number(trading?.maxTradesPerSession || 120));
         setMinConfidence(Number(trading?.minSignalConfidence || TRADING.MIN_SIGNAL_CONFIDENCE));
       } catch (_) {
         // Keep built-in defaults when settings are unavailable.

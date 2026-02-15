@@ -3,16 +3,18 @@ import { Input } from "../../../shared/components/ui/inputs/Input.jsx";
 import { useToast } from "../../notifications/hooks/useToast.js";
 import { getRiskSettings, saveRiskSettings } from "../services/settingsService.js";
 
+const RECOMMENDED_RISK_LIMITS = {
+  dailyLossLimit: 50,
+  maxConsecutiveLosses: 7,
+  maxStakePercent: 5,
+  stopOnHighRisk: true,
+};
+
 export function RiskLimits() {
   const toast = useToast();
   const [loading, setLoading] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
-  const [form, setForm] = React.useState({
-    dailyLossLimit: 50,
-    maxConsecutiveLosses: 5,
-    maxStakePercent: 5,
-    stopOnHighRisk: true,
-  });
+  const [form, setForm] = React.useState(RECOMMENDED_RISK_LIMITS);
 
   React.useEffect(() => {
     let mounted = true;
@@ -22,9 +24,11 @@ export function RiskLimits() {
         const data = await getRiskSettings();
         if (mounted) {
           setForm({
-            dailyLossLimit: Number(data.dailyLossLimit || 50),
-            maxConsecutiveLosses: Number(data.maxConsecutiveLosses || 5),
-            maxStakePercent: Number(data.maxStakePercent || 5),
+            dailyLossLimit: Number(data.dailyLossLimit || RECOMMENDED_RISK_LIMITS.dailyLossLimit),
+            maxConsecutiveLosses: Number(
+              data.maxConsecutiveLosses || RECOMMENDED_RISK_LIMITS.maxConsecutiveLosses
+            ),
+            maxStakePercent: Number(data.maxStakePercent || RECOMMENDED_RISK_LIMITS.maxStakePercent),
             stopOnHighRisk: Boolean(data.stopOnHighRisk),
           });
         }
@@ -48,6 +52,19 @@ export function RiskLimits() {
       toast.success("Risk settings saved.");
     } catch (error) {
       toast.error("Failed to save risk settings.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const onResetRecommended = async () => {
+    setSaving(true);
+    try {
+      setForm(RECOMMENDED_RISK_LIMITS);
+      await saveRiskSettings(RECOMMENDED_RISK_LIMITS);
+      toast.success("Recommended risk defaults restored.");
+    } catch (error) {
+      toast.error("Failed to reset risk settings.");
     } finally {
       setSaving(false);
     }
@@ -117,13 +134,23 @@ export function RiskLimits() {
           </label>
         </div>
       </div>
-      <button
-        type="submit"
-        disabled={saving}
-        className="rounded-lg border border-accent/50 bg-accent/10 px-3 py-2 text-xs font-semibold text-accent transition hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        {saving ? "Saving..." : "Save Risk Limits"}
-      </button>
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="submit"
+          disabled={saving}
+          className="rounded-lg border border-accent/50 bg-accent/10 px-3 py-2 text-xs font-semibold text-accent transition hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {saving ? "Saving..." : "Save Risk Limits"}
+        </button>
+        <button
+          type="button"
+          disabled={saving || loading}
+          onClick={onResetRecommended}
+          className="rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-xs font-semibold text-white/80 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Reset to Recommended
+        </button>
+      </div>
     </form>
   );
 }

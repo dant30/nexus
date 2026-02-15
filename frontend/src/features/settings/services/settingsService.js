@@ -6,10 +6,10 @@ const TRADING_PREFS_KEY = "settings.trading";
 const RISK_PREFS_KEY = "settings.risk";
 
 const DEFAULT_TRADING_PREFERENCES = {
-  defaultStake: 5,
+  defaultStake: 1,
   minSignalConfidence: 0.7,
   cooldownSeconds: 10,
-  maxTradesPerSession: 5,
+  maxTradesPerSession: 120,
   dailyProfitTarget: 0,
   sessionTakeProfit: 0,
   timeframeSeconds: 60,

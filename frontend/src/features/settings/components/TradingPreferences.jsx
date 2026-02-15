@@ -7,20 +7,22 @@ import {
   saveTradingPreferences,
 } from "../services/settingsService.js";
 
+const RECOMMENDED_TRADING_PREFERENCES = {
+  defaultStake: 1,
+  minSignalConfidence: 0.7,
+  cooldownSeconds: 10,
+  maxTradesPerSession: 120,
+  dailyProfitTarget: 0,
+  sessionTakeProfit: 0,
+  timeframeSeconds: 60,
+  signalsTimeframeSeconds: 0,
+};
+
 export function TradingPreferences() {
   const toast = useToast();
   const [loading, setLoading] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
-  const [form, setForm] = React.useState({
-    defaultStake: 5,
-    minSignalConfidence: 0.7,
-    cooldownSeconds: 10,
-    maxTradesPerSession: 5,
-    dailyProfitTarget: 0,
-    sessionTakeProfit: 0,
-    timeframeSeconds: 60,
-    signalsTimeframeSeconds: 0,
-  });
+  const [form, setForm] = React.useState(RECOMMENDED_TRADING_PREFERENCES);
 
   React.useEffect(() => {
     let mounted = true;
@@ -30,10 +32,12 @@ export function TradingPreferences() {
         const data = await getTradingPreferences();
         if (mounted) {
           setForm({
-            defaultStake: Number(data.defaultStake || 5),
+            defaultStake: Number(data.defaultStake || RECOMMENDED_TRADING_PREFERENCES.defaultStake),
             minSignalConfidence: Number(data.minSignalConfidence || 0.7),
             cooldownSeconds: Number(data.cooldownSeconds || 10),
-            maxTradesPerSession: Number(data.maxTradesPerSession || 5),
+            maxTradesPerSession: Number(
+              data.maxTradesPerSession || RECOMMENDED_TRADING_PREFERENCES.maxTradesPerSession
+            ),
             dailyProfitTarget: Number(data.dailyProfitTarget || 0),
             sessionTakeProfit: Number(data.sessionTakeProfit || 0),
             timeframeSeconds: Number(data.timeframeSeconds || 60),
@@ -65,6 +69,27 @@ export function TradingPreferences() {
       toast.success("Trading preferences saved.");
     } catch (error) {
       toast.error("Failed to save trading preferences.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const onResetRecommended = async () => {
+    setSaving(true);
+    try {
+      setForm(RECOMMENDED_TRADING_PREFERENCES);
+      await saveTradingPreferences(RECOMMENDED_TRADING_PREFERENCES);
+      localStorage.setItem(
+        "nexus:trading:timeframe",
+        String(RECOMMENDED_TRADING_PREFERENCES.timeframeSeconds)
+      );
+      localStorage.setItem(
+        "nexus:trading:signals_timeframe",
+        String(RECOMMENDED_TRADING_PREFERENCES.signalsTimeframeSeconds)
+      );
+      toast.success("Recommended trading defaults restored.");
+    } catch (error) {
+      toast.error("Failed to reset trading preferences.");
     } finally {
       setSaving(false);
     }
@@ -189,13 +214,23 @@ export function TradingPreferences() {
           </Select>
         </div>
       </div>
-      <button
-        type="submit"
-        disabled={saving}
-        className="rounded-lg border border-accent/50 bg-accent/10 px-3 py-2 text-xs font-semibold text-accent transition hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        {saving ? "Saving..." : "Save Trading Preferences"}
-      </button>
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="submit"
+          disabled={saving}
+          className="rounded-lg border border-accent/50 bg-accent/10 px-3 py-2 text-xs font-semibold text-accent transition hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {saving ? "Saving..." : "Save Trading Preferences"}
+        </button>
+        <button
+          type="button"
+          disabled={saving || loading}
+          onClick={onResetRecommended}
+          className="rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-xs font-semibold text-white/80 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Reset to Recommended
+        </button>
+      </div>
     </form>
   );
 }
