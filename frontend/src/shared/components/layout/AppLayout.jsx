@@ -30,24 +30,24 @@ export function AppLayout() {
       <NotificationToast />
       <FloatingContact />
 
-      {/* Navbar */}
+      {/* Navbar - Fixed at top */}
       <Navbar onMenuClick={() => setSidebarOpen(!sidebarOpen)} sidebarOpen={sidebarOpen} />
 
-      {/* Main Layout */}
-      <div className="flex flex-1 min-h-0 overflow-hidden">
-        {/* Sidebar */}
+      {/* Main Layout - Flex row for sidebar + content */}
+      <div className="flex flex-1 min-h-0">
+        {/* Sidebar - Sticky on desktop, slide-in on mobile */}
         <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-        {/* Main Content */}
-        <main className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-          <div className="flex-1 px-4 py-6 sm:px-6 lg:px-8">
+        {/* Main Content - Scrollable area */}
+        <main className="flex-1 overflow-y-auto">
+          <div className="min-h-full px-4 py-6 sm:px-6 lg:px-8">
             <Outlet />
           </div>
-
-          {/* Footer */}
-          <Footer />
         </main>
       </div>
+
+      {/* Footer - Outside main content, always at bottom */}
+      <Footer />
     </div>
   );
 }

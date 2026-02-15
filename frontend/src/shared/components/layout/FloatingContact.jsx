@@ -109,17 +109,11 @@ export default function FloatingContact() {
         />
       )}
 
-      {/* Floating Container */}
-      <div
-        className="fixed z-[70]"
-        style={{
-          right: "max(0.75rem, env(safe-area-inset-right))",
-          bottom: "max(0.75rem, env(safe-area-inset-bottom))",
-        }}
-      >
-        {/* Contact Menu */}
+      {/* Floating Container - Perfect positioning */}
+      <div className="fixed bottom-4 right-4 z-[70] sm:bottom-6 sm:right-6">
+        {/* Contact Menu - Appears above button */}
         <div
-          className={`mb-3 flex flex-col items-end gap-2 transition-all duration-200 ${
+          className={`absolute bottom-full right-0 mb-3 flex flex-col items-end gap-2 transition-all duration-200 ${
             open
               ? "pointer-events-auto opacity-100 translate-y-0"
               : "pointer-events-none opacity-0 translate-y-2"

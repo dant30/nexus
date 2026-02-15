@@ -59,13 +59,21 @@ export function Sidebar({ open, onClose }) {
         />
       )}
 
-      {/* Sidebar */}
+      {/* Sidebar - Sticky on desktop */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 h-screen w-72 sm:sticky sm:top-16 sm:z-30 sm:h-[calc(100vh-4rem)] sm:shrink-0
-          border-r border-white/10 bg-slate/95 backdrop-blur-sm sm:overflow-hidden
-          transition-transform duration-300 ease-out ${
-            open ? "translate-x-0" : "-translate-x-full sm:translate-x-0"
-          }`}
+        className={`
+          /* Mobile styles (slide-in) */
+          fixed inset-y-0 left-0 z-50 h-screen w-72
+          transition-transform duration-300 ease-out
+          ${open ? "translate-x-0" : "-translate-x-full"}
+
+          /* Desktop styles (sticky) */
+          sm:sticky sm:top-16 sm:z-30 sm:block sm:h-[calc(100vh-4rem)] sm:w-72 sm:shrink-0
+          sm:translate-x-0 sm:overflow-hidden sm:border-r sm:border-white/10 sm:bg-slate/95 sm:backdrop-blur-sm
+
+          /* Base styles */
+          border-r border-white/10 bg-slate/95 backdrop-blur-sm
+        `}
       >
         <div className="flex h-full flex-col">
           {/* Header with Close Button - Mobile Only */}
@@ -80,7 +88,7 @@ export function Sidebar({ open, onClose }) {
             </button>
           </div>
 
-          {/* Navigation - Scrollable */}
+          {/* Navigation - Scrollable within sidebar */}
           <div className="flex-1 overflow-y-auto px-2 py-4">
             <p className="px-4 py-3 text-xs uppercase tracking-wider text-white/40">Workspace</p>
 
