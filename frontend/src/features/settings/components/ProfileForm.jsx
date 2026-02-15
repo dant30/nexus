@@ -1,4 +1,5 @@
 import React from "react";
+import { Copy } from "lucide-react";
 import { Input } from "../../../shared/components/ui/inputs/Input.jsx";
 import { useAuth } from "../../auth/contexts/AuthContext.jsx";
 import { useToast } from "../../notifications/hooks/useToast.js";
@@ -7,6 +8,7 @@ import {
   getUserProfile,
   updateUserProfile,
 } from "../services/settingsService.js";
+import { buildReferralLink } from "../../referrals/services/referralService.js";
 
 export function ProfileForm() {
   const { user } = useAuth();
@@ -27,6 +29,10 @@ export function ProfileForm() {
     newPassword: "",
     confirmPassword: "",
   });
+  const referralLink = React.useMemo(
+    () => buildReferralLink(profile.affiliate_code),
+    [profile.affiliate_code]
+  );
 
   React.useEffect(() => {
     let mounted = true;
@@ -98,6 +104,19 @@ export function ProfileForm() {
     }
   };
 
+  const onCopyReferralLink = async () => {
+    if (!referralLink) {
+      toast.warning("No affiliate code available.");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(referralLink);
+      toast.success("Referral link copied.");
+    } catch {
+      toast.error("Failed to copy referral link.");
+    }
+  };
+
   return (
     <div className="space-y-4">
       <form onSubmit={onSaveProfile} className="space-y-3">
@@ -140,7 +159,21 @@ export function ProfileForm() {
           </div>
           <div>
             <label className="mb-1 block text-xs font-semibold text-white/70">Affiliate Code</label>
-            <Input value={profile.affiliate_code || "-"} disabled />
+            <div className="flex items-center gap-2">
+              <Input value={profile.affiliate_code || "-"} disabled />
+              <button
+                type="button"
+                onClick={onCopyReferralLink}
+                disabled={!profile.affiliate_code}
+                className="inline-flex h-9 items-center gap-1 rounded-md border border-accent/40 bg-accent/10 px-3 text-xs font-semibold text-accent transition hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Copy size={12} />
+                Copy Link
+              </button>
+            </div>
+            {referralLink ? (
+              <p className="mt-1 break-all text-[11px] text-white/45">{referralLink}</p>
+            ) : null}
           </div>
           <div>
             <label className="mb-1 block text-xs font-semibold text-white/70">Markup %</label>
