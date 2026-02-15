@@ -106,19 +106,19 @@ export function Navbar({ onMenuClick, sidebarOpen }) {
             {/* Notifications */}
             <NotificationBell />
 
-            {/* Account Switcher */}
-            <div className="relative hidden sm:block" ref={accountMenuRef}>
+            {/* Account Switcher (desktop + mobile) */}
+            <div className="relative" ref={accountMenuRef}>
               <button
                 data-account-menu-trigger
                 onClick={() => {
                   setOpenAccountMenu((v) => !v);
                   setOpenUserMenu(false);
                 }}
-                className="flex items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-xs sm:text-sm text-white/80 transition-all hover:border-accent/40 hover:bg-accent/5 hover:text-white whitespace-nowrap"
+                className="flex max-w-[10.5rem] items-center gap-2 rounded-lg border border-white/10 px-2.5 py-2 text-xs sm:max-w-none sm:px-3 sm:text-sm text-white/80 transition-all hover:border-accent/40 hover:bg-accent/5 hover:text-white"
               >
                 <span className="truncate">{accountLabel}</span>
                 {accountId && (
-                  <span className="hidden sm:inline text-white/40">#{accountId}</span>
+                  <span className="hidden md:inline text-white/40">#{accountId}</span>
                 )}
                 <ChevronDown
                   size={16}
@@ -129,7 +129,7 @@ export function Navbar({ onMenuClick, sidebarOpen }) {
               </button>
 
               {openAccountMenu && accounts && accounts.length > 0 && (
-                <div className="absolute right-0 top-full mt-2 w-72 rounded-xl border border-white/10 bg-slate/98 shadow-lg backdrop-blur-sm">
+                <div className="absolute right-0 top-full mt-2 w-72 max-w-[calc(100vw-1rem)] rounded-xl border border-white/10 bg-slate/98 shadow-lg backdrop-blur-sm">
                   <div className="border-b border-white/10 px-4 py-3">
                     <p className="text-xs uppercase tracking-wider text-white/40">
                       Switch Account
