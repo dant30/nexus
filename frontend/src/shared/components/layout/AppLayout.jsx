@@ -26,28 +26,29 @@ export function AppLayout() {
   }, []);
 
   return (
-    <div className="flex min-h-screen flex-col bg-ink text-white">
+    <div className="flex h-screen flex-col bg-ink text-white overflow-hidden">
       <NotificationToast />
       <FloatingContact />
 
-      {/* Navbar - Fixed at top */}
-      <Navbar onMenuClick={() => setSidebarOpen(!sidebarOpen)} sidebarOpen={sidebarOpen} />
+      {/* Navbar */}
+      <Navbar
+        onMenuClick={() => setSidebarOpen((prev) => !prev)}
+        sidebarOpen={sidebarOpen}
+      />
 
-      {/* Main Layout - Flex row for sidebar + content */}
-      <div className="flex flex-1 min-h-0">
-        {/* Sidebar - Sticky on desktop, slide-in on mobile */}
+      {/* Layout */}
+      <div className="flex flex-1 overflow-hidden">
         <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-        {/* Main Content - Scrollable area */}
-        <main className="flex-1 overflow-y-auto">
-          <div className="min-h-full px-4 py-6 sm:px-6 lg:px-8">
+        {/* Main Content */}
+        <main className="flex-1 overflow-y-auto bg-ink">
+          <div className="min-h-full px-3 py-5 sm:px-5 lg:px-6">
             <Outlet />
-            {/* Footer - Outside main content, always at bottom */}
-            <Footer />
           </div>
+
+          <Footer />
         </main>
       </div>
-
     </div>
   );
 }
