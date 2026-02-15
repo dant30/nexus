@@ -63,6 +63,7 @@ export function AutoTrading() {
   const [dailyLoss, setDailyLoss] = useState(0);
   const [dailyProfit, setDailyProfit] = useState(0);
   const [sessionRealizedProfit, setSessionRealizedProfit] = useState(0);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const { signals } = useSignals();
@@ -271,19 +272,28 @@ export function AutoTrading() {
               <option value="CALL_PUT">Call/Put</option>
             </Select>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="mb-1 block text-xs font-semibold text-white/70">
-                Cooldown (seconds)
-              </label>
-              <Input
-                type="number"
-                min="0"
-                step="1"
-                value={cooldownSeconds}
-                onChange={(event) => setCooldownSeconds(event.target.value)}
-              />
-            </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-white/70">
+              Cooldown (seconds)
+            </label>
+            <Input
+              type="number"
+              min="0"
+              step="1"
+              value={cooldownSeconds}
+              onChange={(event) => setCooldownSeconds(event.target.value)}
+            />
+          </div>
+          <div>
+            <button
+              type="button"
+              onClick={() => setShowAdvanced((prev) => !prev)}
+              className="text-xs font-semibold text-white/70 transition hover:text-white"
+            >
+              {showAdvanced ? "Hide Advanced" : "Show Advanced"}
+            </button>
+          </div>
+          {showAdvanced ? (
             <div>
               <label className="mb-1 block text-xs font-semibold text-white/70">
                 Max Trades / Session
@@ -296,7 +306,7 @@ export function AutoTrading() {
                 onChange={(event) => setMaxTradesPerSession(event.target.value)}
               />
             </div>
-          </div>
+          ) : null}
           <div>
             <label className="mb-1 block text-xs font-semibold text-white/70">
               Min Signal Confidence ({Math.round(normalizedMinConfidence * 100)}%)

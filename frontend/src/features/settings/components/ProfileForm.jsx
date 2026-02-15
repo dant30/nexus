@@ -59,7 +59,7 @@ export function ProfileForm() {
     return () => {
       mounted = false;
     };
-  }, [toast, user?.email, user?.username]);
+  }, []);
 
   const onSaveProfile = async (event) => {
     event.preventDefault();

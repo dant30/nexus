@@ -54,7 +54,7 @@ export function TradingPreferences() {
     return () => {
       mounted = false;
     };
-  }, [toast]);
+  }, []);
 
   const onSave = async (event) => {
     event.preventDefault();

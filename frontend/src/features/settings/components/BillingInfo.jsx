@@ -39,7 +39,7 @@ export function BillingInfo() {
     return () => {
       mounted = false;
     };
-  }, [toast]);
+  }, []);
 
   return (
     <div className="space-y-4">
