@@ -42,12 +42,12 @@ export function AppLayout() {
         <main className="flex-1 overflow-y-auto">
           <div className="min-h-full px-4 py-6 sm:px-6 lg:px-8">
             <Outlet />
+            {/* Footer - Outside main content, always at bottom */}
+            <Footer />
           </div>
         </main>
       </div>
 
-      {/* Footer - Outside main content, always at bottom */}
-      <Footer />
     </div>
   );
 }
