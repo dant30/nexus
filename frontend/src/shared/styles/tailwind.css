@@ -1,3 +1,27 @@
+/* shared variables & animations are imported here so components can use CSS vars and keyframes */
+@import "./variables.css";
+@import "./animations.css";
+
+/* Tailwind layers */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Custom component utilities */
+@layer components {
+  .card-glass {
+    @apply rounded-lg bg-glass border border-glass-strong p-4 shadow-card;
+  }
+  .btn-accent {
+    @apply inline-flex items-center justify-center rounded-md px-4 py-2 bg-accent text-ink font-semibold hover:bg-accent/90 transition-colors;
+  }
+}
+
+@layer utilities {
+  .shadow-accent {
+    box-shadow: 0 8px 30px rgba(34,197,94,0.06);
+  }
+  .glass-border {
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+}

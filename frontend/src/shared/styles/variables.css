@@ -2,4 +2,21 @@
   --ink: #0b0f1a;
   --slate: #111827;
   --accent: #22c55e;
+  --accent-muted: #86efac;
+  --primary: #0ea5a4;
+  --bg-gradient-start: rgba(34,197,94,0.12);
+  --bg-gradient-2: rgba(99,102,241,0.12);
+  --glass: rgba(255,255,255,0.04);
+  --glass-strong: rgba(255,255,255,0.06);
+
+  /* typography */
+  --font-sans: "Space Grotesk", system-ui, sans-serif;
+  --text: #e5e7eb;
+  --muted-text: rgba(229,231,235,0.7);
+}
+
+/* Utility CSS variables for dark mode */
+body.dark {
+  --bg-gradient-start: rgba(34,197,94,0.08);
+  --bg-gradient-2: rgba(99,102,241,0.06);
 }
