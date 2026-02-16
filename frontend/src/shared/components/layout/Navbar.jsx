@@ -54,7 +54,7 @@ export function Navbar({ onMenuClick, sidebarOpen }) {
   }, [openUserMenu, openAccountMenu]);
 
   return (
-    <nav className="sticky top-0 z-50 border-b border-white/10 bg-slate/95 backdrop-blur-md">
+    <nav className="sticky top-0 z-50 border-b border-white/10 bg-slate-950/95 backdrop-blur-md">
       <div className="flex h-16 items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
         {/* Left: Menu + Logo */}
         <div className="flex flex-1 items-center gap-3 min-w-0">
@@ -107,8 +107,8 @@ export function Navbar({ onMenuClick, sidebarOpen }) {
               </button>
 
               {openAccountMenu && accounts && accounts.length > 0 && (
-                <div className="absolute right-0 top-full z-50 mt-2 w-72 max-w-[calc(100vw-1rem)] rounded-xl border border-white/10 bg-slate-900 shadow-2xl ring-1 ring-black/40">
-                  <div className="border-b border-white/10 px-4 py-3">
+                <div className="absolute right-0 top-full z-50 mt-2 w-72 max-w-[calc(100vw-1rem)] rounded-xl border border-white/10 bg-slate-900 shadow-2xl ring-1 ring-black/60">
+                  <div className="border-b border-white/10 bg-slate-900 px-4 py-3">
                     <p className="text-xs uppercase tracking-wider text-white/40">Switch Account</p>
                   </div>
                   <div className="max-h-56 overflow-y-auto bg-slate-900">
@@ -120,7 +120,7 @@ export function Navbar({ onMenuClick, sidebarOpen }) {
                           switchAccount?.(account.id);
                           setOpenAccountMenu(false);
                         }}
-                        className={`flex w-full items-center justify-between gap-2 px-4 py-3 text-sm transition-colors ${
+                        className={`flex w-full items-center justify-between gap-2 bg-slate-900 px-4 py-3 text-sm transition-colors ${
                           activeAccount?.id === account.id
                             ? "bg-accent/15 text-accent border-l-2 border-accent"
                             : "text-white/70 hover:bg-white/5 border-l-2 border-transparent"
@@ -161,17 +161,17 @@ export function Navbar({ onMenuClick, sidebarOpen }) {
               </button>
 
               {openUserMenu && (
-                <div className="absolute right-0 top-full z-50 mt-2 w-56 overflow-hidden rounded-xl border border-white/10 bg-slate-900 shadow-2xl ring-1 ring-black/40">
-                  <div className="border-b border-white/10 px-4 py-3 bg-slate-900">
+                <div className="absolute right-0 top-full z-50 mt-2 w-56 overflow-hidden rounded-xl border border-white/10 bg-slate-900 shadow-2xl ring-1 ring-black/60">
+                  <div className="border-b border-white/10 bg-slate-900 px-4 py-3">
                     <p className="text-xs font-semibold text-white truncate">{displayName}</p>
                     <p className="text-xs text-white/40 truncate">{user?.email || user?.username}</p>
                   </div>
 
-                  <div className="space-y-1 p-2 bg-slate-900">
+                  <div className="space-y-1 bg-slate-900 p-2">
                     <Link
                       to="/settings/profile"
                       onClick={() => setOpenUserMenu(false)}
-                      className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-white/80 transition-colors hover:bg-white/5 hover:text-white"
+                      className="flex items-center gap-3 rounded-lg bg-slate-900 px-3 py-2.5 text-sm text-white/80 transition-colors hover:bg-white/5 hover:text-white"
                     >
                       <User size={16} />
                       <span>Profile</span>
@@ -180,20 +180,20 @@ export function Navbar({ onMenuClick, sidebarOpen }) {
                     <Link
                       to="/settings"
                       onClick={() => setOpenUserMenu(false)}
-                      className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-white/80 transition-colors hover:bg-white/5 hover:text-white"
+                      className="flex items-center gap-3 rounded-lg bg-slate-900 px-3 py-2.5 text-sm text-white/80 transition-colors hover:bg-white/5 hover:text-white"
                     >
                       <Settings size={16} />
                       <span>Settings</span>
                     </Link>
                   </div>
 
-                  <div className="border-t border-white/10 p-2 bg-slate-900">
+                  <div className="border-t border-white/10 bg-slate-900 p-2">
                     <button
                       onClick={() => {
                         signOut();
                         setOpenUserMenu(false);
                       }}
-                      className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-danger/80 transition-colors hover:bg-danger/10 hover:text-danger"
+                      className="flex w-full items-center gap-3 rounded-lg bg-slate-900 px-3 py-2.5 text-sm text-danger/80 transition-colors hover:bg-danger/10 hover:text-danger"
                     >
                       <LogOut size={16} />
                       <span>Sign out</span>
