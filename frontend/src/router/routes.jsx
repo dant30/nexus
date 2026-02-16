@@ -31,7 +31,7 @@ export const protectedRoutes = [
   },
   {
     path: "/dashboard/trading",
-    label: "Trading",
+    label: "Trade",
     meta: "Live",
     element: <TradingDashboard />,
   },
