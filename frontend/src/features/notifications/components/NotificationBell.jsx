@@ -8,9 +8,39 @@ import { NotificationList } from "./NotificationList.jsx";
 export function NotificationBell() {
   const { unreadCount, markAllAsRead } = useNotifications();
   const [isOpen, setIsOpen] = useState(false);
+  const [renderOverlay, setRenderOverlay] = useState(false);
+  const [animateIn, setAnimateIn] = useState(false);
   const [desktopPanelStyle, setDesktopPanelStyle] = useState(null);
   const triggerRef = useRef(null);
   const panelRef = useRef(null);
+  const closeTimerRef = useRef(null);
+
+  const openPanel = () => setIsOpen(true);
+  const closePanel = () => setIsOpen(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      if (closeTimerRef.current) {
+        clearTimeout(closeTimerRef.current);
+        closeTimerRef.current = null;
+      }
+      setRenderOverlay(true);
+      const raf = requestAnimationFrame(() => setAnimateIn(true));
+      return () => cancelAnimationFrame(raf);
+    }
+
+    setAnimateIn(false);
+    closeTimerRef.current = setTimeout(() => {
+      setRenderOverlay(false);
+      closeTimerRef.current = null;
+    }, 180);
+    return () => {
+      if (closeTimerRef.current) {
+        clearTimeout(closeTimerRef.current);
+        closeTimerRef.current = null;
+      }
+    };
+  }, [isOpen]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -19,7 +49,7 @@ export function NotificationBell() {
       const clickedTrigger = triggerRef.current?.contains(target);
       const clickedPanel = panelRef.current?.contains(target);
       if (!clickedTrigger && !clickedPanel) {
-        setIsOpen(false);
+        closePanel();
       }
     };
 
@@ -32,7 +62,7 @@ export function NotificationBell() {
   // Close on escape key
   useEffect(() => {
     const handleEscape = (event) => {
-      if (event.key === "Escape") setIsOpen(false);
+      if (event.key === "Escape") closePanel();
     };
 
     if (isOpen) {
@@ -91,7 +121,7 @@ export function NotificationBell() {
       <button
         ref={triggerRef}
         type="button"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => (isOpen ? closePanel() : openPanel())}
         className="relative inline-flex rounded-lg border border-white/10 p-2 text-white/70 transition-all hover:border-accent/40 hover:text-accent hover:bg-accent/5"
         aria-label="Notifications"
         aria-expanded={isOpen}
@@ -105,12 +135,14 @@ export function NotificationBell() {
       </button>
 
       {/* Dropdown Menu */}
-      {isOpen &&
+      {renderOverlay &&
         createPortal(
           <>
             <div
-              className="fixed inset-0 z-[80] bg-black/45 backdrop-blur-sm"
-              onClick={() => setIsOpen(false)}
+              className={`fixed inset-0 z-[80] bg-black/45 backdrop-blur-sm transition-opacity duration-200 ${
+                animateIn ? "opacity-100" : "opacity-0"
+              }`}
+              onClick={closePanel}
             />
 
             <div
@@ -121,6 +153,12 @@ export function NotificationBell() {
                 rounded-t-xl border border-white/10 bg-slate-900 shadow-2xl ring-1 ring-black/60
                 max-h-[80vh]
                 sm:max-h-[600px] sm:rounded-xl
+                transition-all duration-200
+                ${
+                  animateIn
+                    ? "opacity-100 translate-y-0 sm:translate-y-0"
+                    : "opacity-0 translate-y-3 sm:-translate-y-2"
+                }
               `}
             >
               <div className="flex items-center justify-between border-b border-white/10 px-4 py-3 bg-slate-900">
@@ -130,7 +168,7 @@ export function NotificationBell() {
                     type="button"
                     onClick={() => {
                       markAllAsRead();
-                      setIsOpen(false);
+                      closePanel();
                     }}
                     className="text-xs text-accent transition hover:text-accent/80"
                   >
@@ -138,7 +176,7 @@ export function NotificationBell() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setIsOpen(false)}
+                    onClick={closePanel}
                     className="rounded-lg p-1 text-white/60 hover:bg-white/5 hover:text-white sm:hidden"
                     aria-label="Close"
                   >
@@ -148,13 +186,13 @@ export function NotificationBell() {
               </div>
 
               <div className="flex-1 overflow-y-auto bg-slate-900 p-2">
-                <NotificationList compact onItemClick={() => setIsOpen(false)} />
+                <NotificationList compact onItemClick={closePanel} />
               </div>
 
               <div className="border-t border-white/10 bg-slate-900 p-3 text-center">
                 <Link
                   to="/dashboard/notifications"
-                  onClick={() => setIsOpen(false)}
+                  onClick={closePanel}
                   className="text-xs text-accent transition hover:text-accent/80"
                 >
                   View all notifications
