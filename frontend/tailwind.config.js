@@ -103,7 +103,7 @@ module.exports = {
   },
 
   plugins: [
-    forms,
+    forms({ strategy: "class" }),
     typography,
     aspectRatio,
     plugin(function ({ addUtilities }) {

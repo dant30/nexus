@@ -45,3 +45,24 @@ svg {
 #root {
   min-height: 100vh;
 }
+
+@layer base {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
+  select,
+  textarea {
+    background-color: #334155; /* slate-700 */
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 0.375rem;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: rgba(255, 255, 255, 0.45);
+  }
+
+  select option {
+    background-color: #0f172a; /* slate-900 */
+    color: #ffffff;
+  }
+}
