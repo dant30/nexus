@@ -152,7 +152,7 @@ class ConnectionPool:
         for key, last_used in list(self._last_used.items()):
             if now - last_used > idle_timeout:
                 user_id = int(key.split("_")[1])
-                logger.info(f"Closing idle connection", user_id=user_id)
+                log_info("Closing idle connection", user_id=user_id)
                 await self.close(user_id)
     
     def get_active_connections(self) -> int:
