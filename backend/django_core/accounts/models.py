@@ -121,6 +121,33 @@ class Account(models.Model):
     )
 
     # =====================
+    # RECOVERY STATE (PERSISTENT)
+    # =====================
+    recovery_active = models.BooleanField(default=False)
+    recovery_loss_to_recover = models.DecimalField(
+        max_digits=20,
+        decimal_places=6,
+        default=Decimal("0"),
+    )
+    recovery_initial_stake = models.DecimalField(
+        max_digits=20,
+        decimal_places=6,
+        blank=True,
+        null=True,
+    )
+    recovery_multiplier = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal("1.00"),
+    )
+    recovery_level = models.IntegerField(default=0)
+    recovery_recovered_amount = models.DecimalField(
+        max_digits=20,
+        decimal_places=6,
+        default=Decimal("0"),
+    )
+
+    # =====================
     # TIMESTAMPS
     # =====================
     created_at = models.DateTimeField(default=timezone.now)

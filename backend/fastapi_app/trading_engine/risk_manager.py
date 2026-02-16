@@ -47,6 +47,7 @@ class RecoveryState:
     active: bool = False
     initial_stake: Decimal = Decimal("0")
     current_level: int = 0
+    multiplier: Decimal = Decimal("1.0")
     loss_to_recover: Decimal = Decimal("0")
     recovered_amount: Decimal = Decimal("0")
 
@@ -103,11 +104,51 @@ class RiskManager:
         self._outcome_cache: Dict[int, Dict[str, Decimal | int]] = {}
         self._recovery_state: Dict[int, RecoveryState] = {}
 
-    def _get_recovery_state(self, account_id: int) -> RecoveryState:
-        """Get/create recovery state for account."""
-        if account_id not in self._recovery_state:
-            self._recovery_state[account_id] = RecoveryState()
-        return self._recovery_state[account_id]
+    @sync_to_async
+    def _load_recovery_state(self, account_id: int) -> RecoveryState:
+        """Load persistent recovery state from Account and mirror to local cache."""
+        try:
+            account = Account.objects.filter(id=account_id).only(
+                "recovery_active",
+                "recovery_initial_stake",
+                "recovery_level",
+                "recovery_multiplier",
+                "recovery_loss_to_recover",
+                "recovery_recovered_amount",
+            ).first()
+            if not account:
+                return RecoveryState()
+
+            state = RecoveryState(
+                active=bool(account.recovery_active),
+                initial_stake=Decimal(str(account.recovery_initial_stake or 0)),
+                current_level=max(0, int(account.recovery_level or 0)),
+                multiplier=Decimal(str(account.recovery_multiplier or 1)),
+                loss_to_recover=Decimal(str(account.recovery_loss_to_recover or 0)),
+                recovered_amount=Decimal(str(account.recovery_recovered_amount or 0)),
+            )
+            self._recovery_state[account_id] = state
+            return state
+        except Exception as exc:
+            log_error("Failed to load persistent recovery state", account_id=account_id, exception=exc)
+            return self._recovery_state.get(account_id, RecoveryState())
+
+    @sync_to_async
+    def _persist_recovery_state(self, account_id: int, state: RecoveryState) -> None:
+        """Persist recovery state on Account for restart/multi-instance safety."""
+        try:
+            level = max(0, min(state.current_level, len(self.fibonacci_sequence) - 1))
+            multiplier = self.fibonacci_sequence[level]
+            Account.objects.filter(id=account_id).update(
+                recovery_active=bool(state.active),
+                recovery_initial_stake=(state.initial_stake if state.initial_stake > 0 else None),
+                recovery_level=level,
+                recovery_multiplier=multiplier.quantize(Decimal("0.01")),
+                recovery_loss_to_recover=max(Decimal("0"), state.loss_to_recover).quantize(Decimal("0.000001")),
+                recovery_recovered_amount=max(Decimal("0"), state.recovered_amount).quantize(Decimal("0.000001")),
+            )
+        except Exception as exc:
+            log_error("Failed to persist recovery state", account_id=account_id, exception=exc)
     
     async def assess_trade(
         self,
@@ -128,7 +169,8 @@ class RiskManager:
         risk_level = "LOW"
         consecutive_losses = await self._count_consecutive_losses(account)
         consecutive_wins = await self._count_consecutive_wins(account)
-        recovery = self._get_recovery_state(account.id)
+        recovery = await self._load_recovery_state(account.id)
+        recovery_dirty = False
         recovery_level = 0
         recovery_stake = None
         check_stake = stake
@@ -141,8 +183,10 @@ class RiskManager:
                 recovery.active = True
                 recovery.initial_stake = stake
                 recovery.current_level = min(consecutive_losses, len(self.fibonacci_sequence) - 1)
+                recovery.multiplier = self.fibonacci_sequence[recovery.current_level]
                 recovery.loss_to_recover = sum(losses, Decimal("0"))
                 recovery.recovered_amount = Decimal("0")
+                recovery_dirty = True
                 log_info(
                     "Recovery mode bootstrapped from streak",
                     account_id=account.id,
@@ -155,7 +199,13 @@ class RiskManager:
         if recovery.active:
             recovery_level = recovery.current_level
             multiplier = self.fibonacci_sequence[recovery_level]
+            if recovery.multiplier != multiplier:
+                recovery.multiplier = multiplier
+                recovery_dirty = True
             base_stake = recovery.initial_stake if recovery.initial_stake > 0 else stake
+            if recovery.initial_stake <= 0:
+                recovery.initial_stake = stake
+                recovery_dirty = True
             recovery_stake = (base_stake * multiplier).quantize(Decimal("0.01"))
             check_stake = recovery_stake
             log_info(
@@ -169,6 +219,9 @@ class RiskManager:
                 recovered_amount=float(recovery.recovered_amount),
                 remaining_to_recover=float(max(Decimal("0"), recovery.loss_to_recover - recovery.recovered_amount)),
             )
+
+        if recovery_dirty:
+            await self._persist_recovery_state(account.id, recovery)
         
         # 1. ACCOUNT BALANCE CHECK
         if account.balance <= 0:
@@ -350,7 +403,7 @@ class RiskManager:
         bucket["net"] = Decimal(str(bucket.get("net", Decimal("0")))) + normalized_profit
         self._outcome_cache[account_id] = bucket
 
-        recovery = self._get_recovery_state(account_id)
+        recovery = await self._load_recovery_state(account_id)
 
         if was_win:
             if not recovery.active:
@@ -375,7 +428,11 @@ class RiskManager:
                     recovered_amount=float(recovery.recovered_amount),
                     loss_to_recover=float(recovery.loss_to_recover),
                 )
-                self._recovery_state[account_id] = RecoveryState()
+                recovery = RecoveryState()
+                self._recovery_state[account_id] = recovery
+                await self._persist_recovery_state(account_id, recovery)
+                return
+            await self._persist_recovery_state(account_id, recovery)
             return
 
         # Losing outcome starts/continues recovery debt.
@@ -389,9 +446,11 @@ class RiskManager:
             recovery.current_level = 1 if len(self.fibonacci_sequence) > 1 else 0
             recovery.loss_to_recover = loss_amount
             recovery.recovered_amount = Decimal("0")
+            recovery.multiplier = self.fibonacci_sequence[recovery.current_level]
         else:
             recovery.loss_to_recover += loss_amount
             recovery.current_level = min(recovery.current_level + 1, len(self.fibonacci_sequence) - 1)
+            recovery.multiplier = self.fibonacci_sequence[recovery.current_level]
 
         log_info(
             "Recovery debt updated",
@@ -403,6 +462,8 @@ class RiskManager:
             multiplier=float(self.fibonacci_sequence[recovery.current_level]),
             base_stake=float(recovery.initial_stake),
         )
+        self._recovery_state[account_id] = recovery
+        await self._persist_recovery_state(account_id, recovery)
     
     def _calculate_recommended_stake(self, account: Account) -> Decimal:
         """Calculate recommended stake based on account balance."""

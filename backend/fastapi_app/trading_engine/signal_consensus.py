@@ -60,9 +60,11 @@ class SignalConsensus:
     
     # Configurable thresholds
     MIN_AGREEING_STRATEGIES = 2
-    MIN_CONFIDENCE_THRESHOLD = 0.70
-    STRONG_CONFIDENCE_THRESHOLD = 0.80
-    NEUTRAL_THRESHOLD = 0.20  # Net vote below this = NEUTRAL
+    MIN_CONFIDENCE_THRESHOLD = 0.72
+    STRONG_CONFIDENCE_THRESHOLD = 0.82
+    NEUTRAL_THRESHOLD = 0.25  # Net vote below this = NEUTRAL
+    MIN_DIRECTIONAL_CONFIDENCE = 0.60
+    WEAK_SIGNAL_OPPOSITION_TOLERANCE = 0.05
     
     def __init__(
         self,
@@ -140,6 +142,8 @@ class SignalConsensus:
         # Normalize votes by total strategies for fair comparison
         avg_rise = rise_votes / total_strategies
         avg_fall = fall_votes / total_strategies
+        avg_rise_directional = (rise_votes / rise_count) if rise_count else 0.0
+        avg_fall_directional = (fall_votes / fall_count) if fall_count else 0.0
         net_vote = avg_rise - avg_fall
         
         # Determine consensus decision based on rules
@@ -150,6 +154,8 @@ class SignalConsensus:
             high_conf_fall=high_conf_fall,
             avg_rise=avg_rise,
             avg_fall=avg_fall,
+            avg_rise_directional=avg_rise_directional,
+            avg_fall_directional=avg_fall_directional,
             net_vote=net_vote,
             total_strategies=total_strategies,
         )
@@ -165,6 +171,8 @@ class SignalConsensus:
             fall_votes=round(avg_fall, 4),
             rise_count=rise_count,
             fall_count=fall_count,
+            rise_directional_conf=round(avg_rise_directional, 4),
+            fall_directional_conf=round(avg_fall_directional, 4),
             total_strategies=total_strategies,
             agreeing_strategies=max(rise_count, fall_count),
         )
@@ -193,6 +201,8 @@ class SignalConsensus:
         high_conf_fall: int,
         avg_rise: float,
         avg_fall: float,
+        avg_rise_directional: float,
+        avg_fall_directional: float,
         net_vote: float,
         total_strategies: int,
     ) -> Tuple[ConsensusDecision, float, str]:
@@ -215,29 +225,49 @@ class SignalConsensus:
             return ConsensusDecision.STRONG_FALL, confidence, reason
         
         # CASE 3: Rise - 2+ rise signals
-        if rise_count >= self.min_agreeing and rise_count > fall_count:
+        if (
+            rise_count >= self.min_agreeing
+            and rise_count > fall_count
+            and avg_rise_directional >= self.MIN_DIRECTIONAL_CONFIDENCE
+            and net_vote > self.NEUTRAL_THRESHOLD
+        ):
             # Confidence based on average rise confidence
             confidence = min(0.70 + (avg_rise * 0.2), 0.85)
             reason = f"Rise: {rise_count} signals, avg confidence {avg_rise:.2f}"
             return ConsensusDecision.RISE, confidence, reason
         
         # CASE 4: Fall - 2+ fall signals
-        if fall_count >= self.min_agreeing and fall_count > rise_count:
+        if (
+            fall_count >= self.min_agreeing
+            and fall_count > rise_count
+            and avg_fall_directional >= self.MIN_DIRECTIONAL_CONFIDENCE
+            and net_vote < -self.NEUTRAL_THRESHOLD
+        ):
             # Confidence based on average fall confidence
             confidence = min(0.70 + (avg_fall * 0.2), 0.85)
             reason = f"Fall: {fall_count} signals, avg confidence {avg_fall:.2f}"
             return ConsensusDecision.FALL, confidence, reason
         
-        # CASE 5: Weak Rise - 1 rise signal, net positive
-        if rise_count == 1 and net_vote > self.NEUTRAL_THRESHOLD:
-            confidence = 0.50 + (avg_rise * 0.2)
-            reason = f"Weak rise: 1 signal, confidence {avg_rise:.2f}"
+        # CASE 5: Weak Rise - exactly 1 high-quality rise signal with minimal opposition
+        if (
+            rise_count == 1
+            and fall_count == 0
+            and avg_rise_directional >= self.MIN_DIRECTIONAL_CONFIDENCE
+            and net_vote > (self.NEUTRAL_THRESHOLD + self.WEAK_SIGNAL_OPPOSITION_TOLERANCE)
+        ):
+            confidence = min(0.52 + (avg_rise_directional * 0.15), 0.68)
+            reason = f"Weak rise: 1 filtered signal, confidence {avg_rise_directional:.2f}"
             return ConsensusDecision.WEAK_RISE, confidence, reason
         
-        # CASE 6: Weak Fall - 1 fall signal, net negative
-        if fall_count == 1 and net_vote < -self.NEUTRAL_THRESHOLD:
-            confidence = 0.50 + (avg_fall * 0.2)
-            reason = f"Weak fall: 1 signal, confidence {avg_fall:.2f}"
+        # CASE 6: Weak Fall - exactly 1 high-quality fall signal with minimal opposition
+        if (
+            fall_count == 1
+            and rise_count == 0
+            and avg_fall_directional >= self.MIN_DIRECTIONAL_CONFIDENCE
+            and net_vote < -(self.NEUTRAL_THRESHOLD + self.WEAK_SIGNAL_OPPOSITION_TOLERANCE)
+        ):
+            confidence = min(0.52 + (avg_fall_directional * 0.15), 0.68)
+            reason = f"Weak fall: 1 filtered signal, confidence {avg_fall_directional:.2f}"
             return ConsensusDecision.WEAK_FALL, confidence, reason
         
         # CASE 7: Neutral - No clear consensus

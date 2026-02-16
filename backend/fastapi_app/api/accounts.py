@@ -39,6 +39,11 @@ class AccountResponse(BaseModel):
     balance: str
     is_default: bool
     markup_percentage: str
+    recovery_active: bool = False
+    recovery_level: int = 0
+    recovery_loss_to_recover: str = "0"
+    recovery_recovered_amount: str = "0"
+    recovery_multiplier: str = "1.00"
     created_at: str
 
 
@@ -72,6 +77,11 @@ async def list_accounts(current_user: CurrentUser = Depends(get_current_user)):
                 balance=str(acc.balance),
                 is_default=acc.is_default,
                 markup_percentage=str(acc.markup_percentage),
+                recovery_active=bool(acc.recovery_active),
+                recovery_level=int(acc.recovery_level or 0),
+                recovery_loss_to_recover=str(acc.recovery_loss_to_recover or Decimal("0")),
+                recovery_recovered_amount=str(acc.recovery_recovered_amount or Decimal("0")),
+                recovery_multiplier=str(acc.recovery_multiplier or Decimal("1.00")),
                 created_at=acc.created_at.isoformat(),
             )
             for acc in accounts
@@ -102,6 +112,11 @@ async def get_default_account_endpoint(current_user: CurrentUser = Depends(get_c
             balance=str(account.balance),
             is_default=account.is_default,
             markup_percentage=str(account.markup_percentage),
+            recovery_active=bool(account.recovery_active),
+            recovery_level=int(account.recovery_level or 0),
+            recovery_loss_to_recover=str(account.recovery_loss_to_recover or Decimal("0")),
+            recovery_recovered_amount=str(account.recovery_recovered_amount or Decimal("0")),
+            recovery_multiplier=str(account.recovery_multiplier or Decimal("1.00")),
             created_at=account.created_at.isoformat(),
         )
         
@@ -133,6 +148,11 @@ async def get_account(
             balance=str(account.balance),
             is_default=account.is_default,
             markup_percentage=str(account.markup_percentage),
+            recovery_active=bool(account.recovery_active),
+            recovery_level=int(account.recovery_level or 0),
+            recovery_loss_to_recover=str(account.recovery_loss_to_recover or Decimal("0")),
+            recovery_recovered_amount=str(account.recovery_recovered_amount or Decimal("0")),
+            recovery_multiplier=str(account.recovery_multiplier or Decimal("1.00")),
             created_at=account.created_at.isoformat(),
         )
         
@@ -174,6 +194,11 @@ async def create_demo_account_endpoint(
             balance=str(account.balance),
             is_default=account.is_default,
             markup_percentage=str(account.markup_percentage),
+            recovery_active=bool(account.recovery_active),
+            recovery_level=int(account.recovery_level or 0),
+            recovery_loss_to_recover=str(account.recovery_loss_to_recover or Decimal("0")),
+            recovery_recovered_amount=str(account.recovery_recovered_amount or Decimal("0")),
+            recovery_multiplier=str(account.recovery_multiplier or Decimal("1.00")),
             created_at=account.created_at.isoformat(),
         )
         

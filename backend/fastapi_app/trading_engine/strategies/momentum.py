@@ -1,6 +1,6 @@
 """
 Momentum trading strategy with RSI and MACD.
-Professional implementation with configurable thresholds and confirmation logic.
+Balanced for clearer signals without missing opportunities.
 """
 from typing import List, Dict
 from datetime import datetime
@@ -10,15 +10,14 @@ from .base import BaseStrategy, Signal, StrategySignal
 
 class MomentumStrategy(BaseStrategy):
     """
-    Momentum Strategy with RSI and MACD.
-    Now with lower thresholds to generate more signals.
+    Momentum Strategy - Balanced for clear signals.
     """
     
-    # MORE SENSITIVE THRESHOLDS
-    OVERSOLD_THRESHOLD = 45  # Was 35 - now catches more opportunities
-    OVERBOUGHT_THRESHOLD = 55  # Was 65 - now catches more opportunities
-    MIN_CONFIDENCE_THRESHOLD = 0.40  # Was 0.50
-    STRONG_CONFIDENCE_THRESHOLD = 0.65  # Was 0.75
+    # BALANCED THRESHOLDS
+    OVERSOLD_THRESHOLD = 40  # Was 45 - stricter oversold
+    OVERBOUGHT_THRESHOLD = 60  # Was 55 - stricter overbought
+    MIN_CONFIDENCE_THRESHOLD = 0.50  # Was 0.40 - higher minimum
+    STRONG_CONFIDENCE_THRESHOLD = 0.75  # Was 0.65 - stronger required
     
     def __init__(self, symbol: str, period: int = 60, rsi_period: int = 14):
         super().__init__(symbol, period)
@@ -39,37 +38,53 @@ class MomentumStrategy(BaseStrategy):
                                  reason="Unable to calculate RSI",
                                  timestamp=datetime.utcnow().isoformat(),
                                  strategy=self.name)
+
+        # Add MACD for confirmation
+        macd_data = self._calculate_macd(closes)
         
-        # RISE signal - oversold
+        # RISE signal - strong oversold with confirmation
         if rsi <= self.OVERSOLD_THRESHOLD:
-            # More aggressive confidence calculation
             rsi_strength = (self.OVERSOLD_THRESHOLD - rsi) / self.OVERSOLD_THRESHOLD
-            confidence = 0.45 + (rsi_strength * 0.35)  # Was 0.50 + (rsi_strength * 0.30)
+            confidence = 0.50 + (rsi_strength * 0.30)
+
+            # MACD confirmation boost
+            if macd_data and macd_data["histogram"] > 0:
+                confidence += 0.15
+                reason = f"RSI oversold ({rsi:.2f}) + MACD bullish"
+            else:
+                reason = f"RSI oversold ({rsi:.2f})"
             
             return StrategySignal(
                 signal=Signal.RISE,
-                confidence=round(min(confidence, 0.90), 4),
-                reason=f"RSI oversold ({rsi:.2f})",
+                confidence=round(min(confidence, 0.95), 4),
+                reason=reason,
                 timestamp=datetime.utcnow().isoformat(),
                 strategy=self.name,
-                metadata={"rsi": rsi}
+                metadata={"rsi": rsi, "macd": macd_data}
             )
         
-        # FALL signal - overbought
+        # FALL signal - strong overbought with confirmation
         elif rsi >= self.OVERBOUGHT_THRESHOLD:
             rsi_strength = (rsi - self.OVERBOUGHT_THRESHOLD) / (100 - self.OVERBOUGHT_THRESHOLD)
-            confidence = 0.45 + (rsi_strength * 0.35)  # Was 0.50 + (rsi_strength * 0.30)
+            confidence = 0.50 + (rsi_strength * 0.30)
+
+            # MACD confirmation boost
+            if macd_data and macd_data["histogram"] < 0:
+                confidence += 0.15
+                reason = f"RSI overbought ({rsi:.2f}) + MACD bearish"
+            else:
+                reason = f"RSI overbought ({rsi:.2f})"
             
             return StrategySignal(
                 signal=Signal.FALL,
-                confidence=round(min(confidence, 0.90), 4),
-                reason=f"RSI overbought ({rsi:.2f})",
+                confidence=round(min(confidence, 0.95), 4),
+                reason=reason,
                 timestamp=datetime.utcnow().isoformat(),
                 strategy=self.name,
-                metadata={"rsi": rsi}
+                metadata={"rsi": rsi, "macd": macd_data}
             )
         
-        # Neutral - still return HOLD but with low confidence
+        # Neutral
         return StrategySignal(
             signal=Signal.HOLD,
             confidence=0.30,
