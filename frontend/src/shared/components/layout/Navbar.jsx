@@ -111,7 +111,7 @@ export function Navbar({ onMenuClick, sidebarOpen }) {
                   <div className="border-b border-white/10 px-4 py-3">
                     <p className="text-xs uppercase tracking-wider text-white/40">Switch Account</p>
                   </div>
-                  <div className="max-h-56 overflow-y-auto">
+                  <div className="max-h-56 overflow-y-auto bg-slate-900">
                     {accounts.map((account) => (
                       <button
                         key={account.id}
@@ -162,12 +162,12 @@ export function Navbar({ onMenuClick, sidebarOpen }) {
 
               {openUserMenu && (
                 <div className="absolute right-0 top-full z-50 mt-2 w-56 overflow-hidden rounded-xl border border-white/10 bg-slate-900 shadow-2xl ring-1 ring-black/40">
-                  <div className="border-b border-white/10 px-4 py-3">
+                  <div className="border-b border-white/10 px-4 py-3 bg-slate-900">
                     <p className="text-xs font-semibold text-white truncate">{displayName}</p>
                     <p className="text-xs text-white/40 truncate">{user?.email || user?.username}</p>
                   </div>
 
-                  <div className="space-y-1 p-2">
+                  <div className="space-y-1 p-2 bg-slate-900">
                     <Link
                       to="/settings/profile"
                       onClick={() => setOpenUserMenu(false)}
@@ -187,7 +187,7 @@ export function Navbar({ onMenuClick, sidebarOpen }) {
                     </Link>
                   </div>
 
-                  <div className="border-t border-white/10 p-2">
+                  <div className="border-t border-white/10 p-2 bg-slate-900">
                     <button
                       onClick={() => {
                         signOut();
