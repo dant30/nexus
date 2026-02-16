@@ -39,8 +39,8 @@ export function Footer() {
     <footer className="border-t border-white/10 bg-gradient-to-b from-slate/80 to-slate/95 backdrop-blur-sm transition-colors">
       {/* Main Footer Content */}
       <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
-        {/* Top Grid - 4 columns on desktop */}
-        <div className="grid grid-cols-1 gap-10 sm:grid-cols-2 lg:grid-cols-12">
+        {/* Top Grid - Desktop: Brand (4) + Links (8) */}
+        <div className="grid grid-cols-1 gap-10 lg:grid-cols-12 lg:gap-8">
           
           {/* Brand Column - Takes 4 columns */}
           <div className="lg:col-span-4 space-y-4">
@@ -80,36 +80,40 @@ export function Footer() {
             </div>
           </div>
 
-          {/* Links Columns - Each takes 2 columns on desktop */}
-          {Object.entries(footerLinks).map(([category, links]) => (
-            <div key={category} className="lg:col-span-2">
-              <h4 className="text-xs uppercase tracking-wider font-semibold text-white/80 mb-5 border-b border-white/10 pb-2 inline-block">
-                {category}
-              </h4>
-              <ul className="space-y-3">
-                {links.map((link) => (
-                  <li key={link.label}>
-                    <Link
-                      to={link.href}
-                      className="group flex items-center gap-2 text-sm text-white/60 transition-all hover:text-accent"
-                    >
-                      <link.icon 
-                        size={14} 
-                        className="text-white/30 group-hover:text-accent transition-colors" 
-                      />
-                      <span>{link.label}</span>
-                      {link.external && (
-                        <ExternalLink
-                          size={12}
-                          className="opacity-0 group-hover:opacity-100 transition-opacity"
-                        />
-                      )}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
+          {/* Links Container - Takes 8 columns, 3 equal columns inside */}
+          <div className="lg:col-span-8">
+            <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3">
+              {Object.entries(footerLinks).map(([category, links]) => (
+                <div key={category}>
+                  <h4 className="text-xs uppercase tracking-wider font-semibold text-white/80 mb-4 border-b border-white/10 pb-2 inline-block">
+                    {category}
+                  </h4>
+                  <ul className="space-y-3">
+                    {links.map((link) => (
+                      <li key={link.label}>
+                        <Link
+                          to={link.href}
+                          className="group flex items-center gap-2 text-sm text-white/60 transition-all hover:text-accent"
+                        >
+                          <link.icon 
+                            size={14} 
+                            className="text-white/30 group-hover:text-accent transition-colors" 
+                          />
+                          <span>{link.label}</span>
+                          {link.external && (
+                            <ExternalLink
+                              size={12}
+                              className="opacity-0 group-hover:opacity-100 transition-opacity"
+                            />
+                          )}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
             </div>
-          ))}
+          </div>
         </div>
 
         {/* Divider with gradient */}
