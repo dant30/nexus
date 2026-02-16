@@ -581,6 +581,7 @@ async def _execute_trade_internal(
                                 account.id,
                                 trade.status == Trade.STATUS_WON,
                                 trade.profit or Decimal("0"),
+                                trade.stake or Decimal("0"),
                             )
                         log_info(
                             "Trade settled from contract polling",

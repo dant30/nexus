@@ -36,6 +36,19 @@ class RiskAssessment:
     daily_loss_hit: bool = False
     daily_profit_hit: bool = False
     session_take_profit_hit: bool = False
+    recovery_active: bool = False
+    loss_to_recover: Decimal = Decimal("0")
+    recovered_amount: Decimal = Decimal("0")
+
+
+@dataclass
+class RecoveryState:
+    """Stateful per-account recovery that persists across non-loss outcomes in-process."""
+    active: bool = False
+    initial_stake: Decimal = Decimal("0")
+    current_level: int = 0
+    loss_to_recover: Decimal = Decimal("0")
+    recovered_amount: Decimal = Decimal("0")
 
 
 class RiskManager:
@@ -88,6 +101,13 @@ class RiskManager:
         self.max_consecutive_losses = max_consecutive_losses or self.MAX_CONSECUTIVE_LOSSES
         self.fibonacci_sequence = fibonacci_sequence or self.FIBONACCI_SEQUENCE
         self._outcome_cache: Dict[int, Dict[str, Decimal | int]] = {}
+        self._recovery_state: Dict[int, RecoveryState] = {}
+
+    def _get_recovery_state(self, account_id: int) -> RecoveryState:
+        """Get/create recovery state for account."""
+        if account_id not in self._recovery_state:
+            self._recovery_state[account_id] = RecoveryState()
+        return self._recovery_state[account_id]
     
     async def assess_trade(
         self,
@@ -108,22 +128,46 @@ class RiskManager:
         risk_level = "LOW"
         consecutive_losses = await self._count_consecutive_losses(account)
         consecutive_wins = await self._count_consecutive_wins(account)
-        recovery_level = min(consecutive_losses, len(self.fibonacci_sequence) - 1)
+        recovery = self._get_recovery_state(account.id)
+        recovery_level = 0
         recovery_stake = None
         check_stake = stake
 
-        if consecutive_losses > 0:
+        # If recovery state was lost (e.g. restart) but we still have an active loss streak,
+        # bootstrap from recent consecutive losses.
+        if not recovery.active and consecutive_losses > 0:
+            losses = await self._get_recent_streak_losses(account, consecutive_losses)
+            if losses:
+                recovery.active = True
+                recovery.initial_stake = stake
+                recovery.current_level = min(consecutive_losses, len(self.fibonacci_sequence) - 1)
+                recovery.loss_to_recover = sum(losses, Decimal("0"))
+                recovery.recovered_amount = Decimal("0")
+                log_info(
+                    "Recovery mode bootstrapped from streak",
+                    account_id=account.id,
+                    consecutive_losses=consecutive_losses,
+                    recovery_level=recovery.current_level,
+                    loss_to_recover=float(recovery.loss_to_recover),
+                    loss_count=len(losses),
+                )
+
+        if recovery.active:
+            recovery_level = recovery.current_level
             multiplier = self.fibonacci_sequence[recovery_level]
-            recovery_stake = (stake * multiplier).quantize(Decimal("0.01"))
+            base_stake = recovery.initial_stake if recovery.initial_stake > 0 else stake
+            recovery_stake = (base_stake * multiplier).quantize(Decimal("0.01"))
             check_stake = recovery_stake
             log_info(
                 "Recovery mode active",
                 account_id=account.id,
-                consecutive_losses=consecutive_losses,
                 recovery_level=recovery_level,
                 multiplier=float(multiplier),
                 requested_stake=float(stake),
                 recovery_stake=float(recovery_stake),
+                loss_to_recover=float(recovery.loss_to_recover),
+                recovered_amount=float(recovery.recovered_amount),
+                remaining_to_recover=float(max(Decimal("0"), recovery.loss_to_recover - recovery.recovered_amount)),
             )
         
         # 1. ACCOUNT BALANCE CHECK
@@ -243,6 +287,9 @@ class RiskManager:
             approved=is_approved,
             risk_level=risk_level,
             recovery_level=recovery_level,
+            recovery_active=recovery.active,
+            loss_to_recover=float(recovery.loss_to_recover) if recovery.active else 0,
+            recovered_amount=float(recovery.recovered_amount) if recovery.active else 0,
             consecutive_losses=consecutive_losses,
             consecutive_wins=consecutive_wins,
             daily_loss=float(daily_loss),
@@ -263,7 +310,9 @@ class RiskManager:
                 requested_stake=float(stake),
                 final_stake=float(check_stake),
                 recovery_level=recovery_level,
-                consecutive_losses=consecutive_losses,
+                consecutive_losses=consecutive_losses if consecutive_losses > 0 else 0,
+                loss_to_recover=float(recovery.loss_to_recover) if recovery.active else 0,
+                recovered_amount=float(recovery.recovered_amount) if recovery.active else 0,
             )
         
         return RiskAssessment(
@@ -285,15 +334,75 @@ class RiskManager:
             daily_loss_hit=daily_loss_hit,
             daily_profit_hit=daily_profit_hit,
             session_take_profit_hit=session_take_profit_hit,
+            recovery_active=recovery.active,
+            loss_to_recover=recovery.loss_to_recover if recovery.active else Decimal("0"),
+            recovered_amount=recovery.recovered_amount if recovery.active else Decimal("0"),
         )
 
-    async def record_trade_outcome(self, account_id: int, was_win: bool, profit: Decimal) -> None:
-        """Record recent trade outcome for diagnostics and future adaptive controls."""
+    async def record_trade_outcome(self, account_id: int, was_win: bool, profit: Decimal, stake: Decimal) -> None:
+        """Record outcome and keep recovery active until the full loss debt is recovered."""
+        normalized_profit = Decimal(str(profit or 0))
+        normalized_stake = Decimal(str(stake or 0))
+
         bucket = self._outcome_cache.get(account_id, {"wins": 0, "losses": 0, "net": Decimal("0")})
         bucket["wins"] = int(bucket.get("wins", 0)) + (1 if was_win else 0)
         bucket["losses"] = int(bucket.get("losses", 0)) + (0 if was_win else 1)
-        bucket["net"] = Decimal(str(bucket.get("net", Decimal("0")))) + Decimal(str(profit or 0))
+        bucket["net"] = Decimal(str(bucket.get("net", Decimal("0")))) + normalized_profit
         self._outcome_cache[account_id] = bucket
+
+        recovery = self._get_recovery_state(account_id)
+
+        if was_win:
+            if not recovery.active:
+                return
+
+            if normalized_profit > 0:
+                recovery.recovered_amount += normalized_profit
+
+            remaining = recovery.loss_to_recover - recovery.recovered_amount
+            log_info(
+                "Recovery progress",
+                account_id=account_id,
+                recovered_amount=float(recovery.recovered_amount),
+                loss_to_recover=float(recovery.loss_to_recover),
+                remaining=float(max(Decimal("0"), remaining)),
+            )
+
+            if recovery.recovered_amount >= recovery.loss_to_recover:
+                log_info(
+                    "Recovery completed",
+                    account_id=account_id,
+                    recovered_amount=float(recovery.recovered_amount),
+                    loss_to_recover=float(recovery.loss_to_recover),
+                )
+                self._recovery_state[account_id] = RecoveryState()
+            return
+
+        # Losing outcome starts/continues recovery debt.
+        loss_amount = abs(normalized_profit) if normalized_profit < 0 else normalized_stake
+        if loss_amount <= 0:
+            return
+
+        if not recovery.active:
+            recovery.active = True
+            recovery.initial_stake = normalized_stake if normalized_stake > 0 else self.min_stake
+            recovery.current_level = 1 if len(self.fibonacci_sequence) > 1 else 0
+            recovery.loss_to_recover = loss_amount
+            recovery.recovered_amount = Decimal("0")
+        else:
+            recovery.loss_to_recover += loss_amount
+            recovery.current_level = min(recovery.current_level + 1, len(self.fibonacci_sequence) - 1)
+
+        log_info(
+            "Recovery debt updated",
+            account_id=account_id,
+            loss_amount=float(loss_amount),
+            loss_to_recover=float(recovery.loss_to_recover),
+            recovered_amount=float(recovery.recovered_amount),
+            recovery_level=recovery.current_level,
+            multiplier=float(self.fibonacci_sequence[recovery.current_level]),
+            base_stake=float(recovery.initial_stake),
+        )
     
     def _calculate_recommended_stake(self, account: Account) -> Decimal:
         """Calculate recommended stake based on account balance."""
@@ -366,3 +475,31 @@ class RiskManager:
             account=account,
             created_at__gte=one_hour_ago,
         ).count()
+
+    @sync_to_async
+    def _get_recent_streak_losses(self, account: Account, count: int) -> List[Decimal]:
+        """Get exact loss amounts from the current consecutive losing streak."""
+        if count <= 0:
+            return []
+
+        recent_trades = list(
+            Trade.objects.filter(
+                account=account,
+                status__in=[Trade.STATUS_WON, Trade.STATUS_LOST, Trade.STATUS_FAILED],
+            ).order_by("-created_at")[: count + 1]
+        )
+
+        losses: List[Decimal] = []
+        for trade in recent_trades:
+            if len(losses) >= count:
+                break
+            if trade.status in {Trade.STATUS_LOST, Trade.STATUS_FAILED}:
+                if trade.profit is not None:
+                    losses.append(abs(Decimal(str(trade.profit))))
+                elif trade.stake is not None:
+                    losses.append(abs(Decimal(str(trade.stake))))
+                else:
+                    losses.append(self.min_stake)
+            else:
+                break
+        return losses
