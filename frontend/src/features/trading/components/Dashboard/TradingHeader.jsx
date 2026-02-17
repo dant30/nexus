@@ -17,7 +17,7 @@ export function TradingHeader({
           Execute strategies, monitor live consensus, and manage open exposure.
         </p>
         <p className="mt-1 text-xs text-white/45">
-          Mode: {modeLabel} • WS: {connected ? "Connected" : "Disconnected"}
+          Mode: {modeLabel} | WS: {connected ? "Connected" : "Disconnected"}
         </p>
       </div>
 
@@ -33,4 +33,3 @@ export function TradingHeader({
     </div>
   );
 }
-

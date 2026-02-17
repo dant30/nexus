@@ -4,7 +4,7 @@ import { Login } from "../features/auth/pages/Login.jsx";
 import { OAuthCallback } from "../features/auth/pages/OAuthCallback.jsx";
 import { OAuthRedirect } from "../features/auth/pages/OAuthRedirect.jsx";
 import { UserDashboard } from "../features/dashboard/pages/UserDashboard.jsx";
-import { TradingDashboard } from "../features/dashboard/pages/TradingDashboard.jsx";
+import { TradingDashboard } from "../features/trading/pages/TradingDashboard.jsx";
 import { AdminDashboard } from "../features/dashboard/pages/AdminDashboard.jsx";
 import { NotificationCenter } from "../features/notifications/pages/NotificationCenter.jsx";
 import { ReferralDashboard } from "../features/referrals/pages/ReferralDashboard.jsx";

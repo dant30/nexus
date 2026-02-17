@@ -25,4 +25,3 @@ export function TradingWorkspaceTabs({ activeTab = "auto", onTabChange }) {
     </div>
   );
 }
-
