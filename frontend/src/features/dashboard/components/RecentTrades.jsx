@@ -12,6 +12,18 @@ const formatMoney = (value, currency = "USD") =>
     maximumFractionDigits: 2,
   })} ${currency}`.trim();
 
+const resolveSymbol = (trade) => {
+  return (
+    trade?.symbol ||
+    trade?.underlying ||
+    trade?.shortcode ||
+    trade?.market_symbol ||
+    trade?.metadata?.symbol ||
+    trade?.meta?.symbol ||
+    "R_50"
+  );
+};
+
 const statusClass = (status = "") => {
   const s = String(status).toUpperCase();
   if (s.includes("WON")) return "bg-emerald-400/15 text-emerald-300 border-emerald-400/25";
@@ -66,6 +78,7 @@ export function RecentTrades({ trades = [], currency = "USD" }) {
             <tbody className="text-white/80">
               {trades.map((trade) => {
                 const profit = toNumber(trade.profit, 0);
+                const symbol = resolveSymbol(trade);
                 const time = trade.created_at
                   ? new Date(trade.created_at).toLocaleString(undefined, {
                       hour: "2-digit",
@@ -82,7 +95,7 @@ export function RecentTrades({ trades = [], currency = "USD" }) {
                     className="border-b border-white/5 transition hover:bg-white/[0.03]"
                   >
                     <td className="px-3 py-2 text-white/60">{time}</td>
-                    <td className="px-3 py-2 font-medium text-white/85">{trade.symbol || "-"}</td>
+                    <td className="px-3 py-2 font-medium text-white/85">{symbol}</td>
                     <td className="px-3 py-2">{trade.trade_type || "-"}</td>
                     <td className="px-3 py-2">{trade.contract || trade.direction || "-"}</td>
                     <td className="px-3 py-2">{formatMoney(trade.stake, currency)}</td>

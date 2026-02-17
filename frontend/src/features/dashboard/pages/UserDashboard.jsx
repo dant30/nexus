@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { RefreshCw, Activity, Clock3, AlertCircle } from "lucide-react";
+import { RefreshCw, Clock3, AlertCircle } from "lucide-react";
 import { useAuth } from "../../auth/contexts/AuthContext.jsx";
 import { useAccountContext } from "../../accounts/contexts/AccountContext.jsx";
 import { useTradingContext } from "../../trading/contexts/TradingContext.jsx";
@@ -124,40 +124,27 @@ export function UserDashboard() {
   const accountReady = !!activeAccount?.id;
 
   return (
-    <div className="space-y-6 p-4 text-white sm:p-6">
+    <div className="space-y-5 p-4 text-white sm:space-y-6 sm:p-6">
       <Card className="border border-white/10 bg-gradient-to-r from-slate-900/70 via-slate-900/45 to-slate-900/70">
-        <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
-          <div className="flex-1">
-            <h2 className="text-2xl font-bold sm:text-3xl">Welcome back, {displayName}</h2>
-            <p className="mt-2 text-sm text-white/60 sm:text-base">
+        <div className="flex items-start justify-between gap-3 sm:items-center">
+          <div className="min-w-0 flex-1">
+            <h2 className="truncate text-lg font-bold sm:text-2xl">Welcome back, {displayName}</h2>
+            <p className="mt-1 hidden text-sm text-white/60 sm:block">
               Your live account pulse, execution quality, and market position.
             </p>
 
-            <div className="mt-4 flex flex-wrap gap-2">
-              <div
-                className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium ${
-                  connected
-                    ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-300"
-                    : "border-amber-400/30 bg-amber-400/10 text-amber-300"
-                }`}
-              >
-                <div
-                  className={`h-2 w-2 rounded-full ${
-                    connected ? "bg-emerald-300 animate-pulse" : "bg-amber-300"
-                  }`}
-                />
-                {connected ? "Live connected" : "Reconnecting"}
-              </div>
-
-              <div className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/70">
-                <Clock3 size={12} />
-                7-day view
-              </div>
-
-              <div className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/70">
-                <Activity size={12} />
-                {metrics.totalTrades} closed trades
-              </div>
+            <div className="mt-2 flex flex-wrap items-center gap-2 sm:mt-3">
+              <span
+                title={connected ? "Connected" : "Disconnected"}
+                className={`inline-flex h-2.5 w-2.5 rounded-full ${connected ? "bg-emerald-300" : "bg-amber-300"}`}
+              />
+              <span className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/5 px-2 py-1 text-[11px] font-medium text-white/65 sm:px-3">
+                <Clock3 size={11} />
+                7D
+              </span>
+              <span className="inline-flex rounded-full border border-white/15 bg-white/5 px-2 py-1 text-[11px] font-medium text-white/65 sm:px-3">
+                {metrics.totalTrades} trades
+              </span>
             </div>
           </div>
 
@@ -165,10 +152,9 @@ export function UserDashboard() {
             type="button"
             onClick={handleRefresh}
             disabled={loading || refreshing}
-            className="inline-flex items-center gap-2 rounded-lg border border-sky-400/35 bg-sky-400/10 px-4 py-2.5 text-xs font-semibold text-sky-300 transition hover:bg-sky-400/20 hover:border-sky-300/50 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="inline-flex items-center gap-2 rounded-lg border border-sky-400/35 bg-sky-400/10 px-3 py-2 text-xs font-semibold text-sky-300 transition hover:border-sky-300/50 hover:bg-sky-400/20 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <RefreshCw size={16} className={loading || refreshing ? "animate-spin" : ""} />
-            Refresh
+            <RefreshCw size={14} className={loading || refreshing ? "animate-spin" : ""} />
           </button>
         </div>
       </Card>
