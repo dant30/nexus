@@ -27,7 +27,7 @@ export function BalanceCard({ balance = 0, currency = "USD", loading = false, ac
           <p className="truncate text-2xl font-bold text-white sm:text-3xl">
             {loading ? "--" : formatMoney(balance, currency)}
           </p>
-          <p className={`mt-2 text-xs font-medium uppercase tracking-wider ${typeClass}`}>{typeLabel}</p>
+          <p className={`mt-1 text-xs font-medium uppercase tracking-wider ${typeClass}`}>{typeLabel}</p>
         </div>
 
         <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-emerald-400/15 text-emerald-300 shadow-lg shadow-emerald-500/10 transition-transform duration-300 group-hover:scale-110">
@@ -49,3 +49,4 @@ export function BalanceCard({ balance = 0, currency = "USD", loading = false, ac
     </Card>
   );
 }
+

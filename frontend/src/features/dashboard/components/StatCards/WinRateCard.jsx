@@ -19,9 +19,9 @@ export function WinRateCard({ winRate = 0, wins = 0, losses = 0, total = 0 }) {
 
       <div className="relative flex items-start justify-between">
         <div className="min-w-0 flex-1">
-          <p className="mb-3 text-xs font-medium uppercase tracking-wider text-white/50">Win Rate</p>
+          <p className="mb-4 text-xs font-medium uppercase tracking-wider text-white/50">Win Rate</p>
           <p className="text-2xl font-bold text-white sm:text-3xl">{clamped.toFixed(1)}%</p>
-          <p className="mt-2 text-sm text-white/60">
+          <p className="mt-1 text-sm text-white/60">
             <span className="font-semibold text-emerald-300">{wins}W</span>
             <span className="mx-1 text-white/40">/</span>
             <span className="font-semibold text-rose-300">{losses}L</span>
@@ -51,3 +51,4 @@ export function WinRateCard({ winRate = 0, wins = 0, losses = 0, total = 0 }) {
     </Card>
   );
 }
+

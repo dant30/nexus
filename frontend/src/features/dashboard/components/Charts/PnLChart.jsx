@@ -50,7 +50,7 @@ export function PnLChart({ series = [], currency = "USD" }) {
           <div className="flex items-center gap-2">
             <p className="text-sm font-semibold text-white/80">7-Day P/L</p>
             <span
-              className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium ${
+              className={`inline-flex items-center gap-1 rounded-full px-3 py-2 text-xs font-medium ${
                 total >= 0 ? "bg-emerald-400/15 text-emerald-300" : "bg-rose-400/15 text-rose-300"
               }`}
             >
@@ -59,7 +59,7 @@ export function PnLChart({ series = [], currency = "USD" }) {
               {total.toFixed(2)} {currency}
             </span>
           </div>
-          <p className="mt-2 text-xs text-white/50">
+          <p className="mt-1 text-xs text-white/50">
             Avg daily: {avgDaily >= 0 ? "+" : ""}
             {avgDaily.toFixed(2)} {currency}
           </p>
@@ -110,3 +110,4 @@ export function PnLChart({ series = [], currency = "USD" }) {
     </Card>
   );
 }
+

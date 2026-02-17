@@ -20,7 +20,7 @@ export function WinLossChart({ wins = 0, losses = 0 }) {
     return (
       <Card>
         <div className="py-10 text-center">
-          <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-xl border border-white/10 bg-white/5">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-xl border border-white/10 bg-white/5">
             <p className="text-2xl text-white/40">-</p>
           </div>
           <p className="text-sm font-semibold text-white/80">No Trades Yet</p>
@@ -34,9 +34,9 @@ export function WinLossChart({ wins = 0, losses = 0 }) {
     <Card>
       <div className="space-y-5">
         <div>
-          <div className="mb-3 flex items-center justify-between">
+          <div className="mb-4 flex items-center justify-between">
             <p className="text-sm font-semibold text-white/80">Win vs Loss</p>
-            <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${quality.badge}`}>{quality.label}</span>
+            <span className={`rounded-full px-3 py-2 text-xs font-semibold ${quality.badge}`}>{quality.label}</span>
           </div>
           <p className="text-xs text-white/50">{total} total trades</p>
         </div>
@@ -57,7 +57,7 @@ export function WinLossChart({ wins = 0, losses = 0 }) {
         <div className="grid grid-cols-2 gap-3">
           <div className="rounded-lg border border-emerald-400/20 bg-emerald-400/10 p-3">
             <p className="text-xs font-medium uppercase tracking-wider text-emerald-300/70">Wins</p>
-            <div className="mt-2 flex items-baseline gap-2">
+            <div className="mt-1 flex items-baseline gap-2">
               <p className="text-2xl font-bold text-emerald-300">{wins}</p>
               <p className="text-sm text-emerald-300/70">{winsPct.toFixed(1)}%</p>
             </div>
@@ -65,7 +65,7 @@ export function WinLossChart({ wins = 0, losses = 0 }) {
 
           <div className="rounded-lg border border-rose-400/20 bg-rose-400/10 p-3">
             <p className="text-xs font-medium uppercase tracking-wider text-rose-300/70">Losses</p>
-            <div className="mt-2 flex items-baseline gap-2">
+            <div className="mt-1 flex items-baseline gap-2">
               <p className="text-2xl font-bold text-rose-300">{losses}</p>
               <p className="text-sm text-rose-300/70">{lossesPct.toFixed(1)}%</p>
             </div>
@@ -75,3 +75,4 @@ export function WinLossChart({ wins = 0, losses = 0 }) {
     </Card>
   );
 }
+

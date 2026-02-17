@@ -32,7 +32,7 @@ export function DailyPerformance({ series = [] }) {
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <p className="text-sm font-semibold text-white/80">Daily Outcomes</p>
-          <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-xs font-medium text-white/60">
+          <span className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-white/60">
             {series.length} days
           </span>
         </div>
@@ -59,7 +59,7 @@ export function DailyPerformance({ series = [] }) {
                   <div className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-rose-500" style={{ width: `${Math.max(0, Math.min(100, winPct))}%` }} />
                 </div>
 
-                <div className="mt-2 flex items-center justify-between text-[11px] text-white/55">
+                <div className="mt-1 flex items-center justify-between text-[11px] text-white/55">
                   <span>{totalTrades} trades</span>
                   <span>{wins}W / {losses}L</span>
                 </div>
@@ -77,3 +77,4 @@ export function DailyPerformance({ series = [] }) {
     </Card>
   );
 }
+

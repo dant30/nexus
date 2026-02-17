@@ -35,7 +35,14 @@ export function MarketOverview({ signals = [] }) {
       const confidence = toNumber(signal?.consensus?.confidence ?? signal?.confidence, 0);
       return {
         id: signal?.id || `${signal?.symbol || "symbol"}-${index}`,
-        symbol: signal?.symbol || "N/A",
+        symbol:
+          signal?.symbol ||
+          signal?.underlying ||
+          signal?.shortcode ||
+          signal?.market_symbol ||
+          signal?.metadata?.symbol ||
+          signal?.meta?.symbol ||
+          "R_50",
         direction,
         confidence,
       };
@@ -53,7 +60,7 @@ export function MarketOverview({ signals = [] }) {
             <p className="text-sm font-semibold text-white/80">Market Overview</p>
             <p className="mt-1 text-xs text-white/50">Top live opportunities ranked by confidence</p>
           </div>
-          <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2 py-1 text-xs font-medium text-white/60">
+          <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-white/60">
             <Activity size={12} />
             {rows.length} prioritized
           </span>
@@ -80,7 +87,7 @@ export function MarketOverview({ signals = [] }) {
                     <p className="font-semibold text-white/90">{row.symbol}</p>
                     <span
                       className={[
-                        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                        "inline-flex items-center gap-1 rounded-full px-3 py-2 text-[11px] font-semibold",
                         isRise
                           ? "bg-emerald-400/15 text-emerald-300"
                           : isFall
@@ -94,7 +101,7 @@ export function MarketOverview({ signals = [] }) {
                     </span>
                   </div>
 
-                  <div className="mt-2 h-1.5 w-full rounded-full bg-white/10">
+                  <div className="mt-1 h-1.5 w-full rounded-full bg-white/10">
                     <div
                       className={
                         isRise

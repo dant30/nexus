@@ -25,9 +25,9 @@ export function OpenTradesCard({ openTrades = 0, openExposure = 0, currency = "U
 
       <div className="relative flex items-start justify-between">
         <div className="min-w-0 flex-1">
-          <p className="mb-3 text-xs font-medium uppercase tracking-wider text-white/50">Open Positions</p>
+          <p className="mb-4 text-xs font-medium uppercase tracking-wider text-white/50">Open Positions</p>
           <p className="text-2xl font-bold text-white sm:text-3xl">{openTrades}</p>
-          <p className="mt-2 text-sm text-white/60">
+          <p className="mt-1 text-sm text-white/60">
             Exposure: <span className="font-semibold text-white/80">{formatMoney(openExposure, currency)}</span>
           </p>
         </div>
@@ -40,7 +40,7 @@ export function OpenTradesCard({ openTrades = 0, openExposure = 0, currency = "U
       <div className="mt-4 border-t border-white/5 bg-white/[0.02] pt-3">
         <div className="flex items-center justify-between">
           <span className="text-xs text-white/40">Profile</span>
-          <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${exposureTier.badge}`}>
+          <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-2 text-xs font-semibold ${exposureTier.badge}`}>
             <div className="h-1.5 w-1.5 rounded-full bg-current" />
             {exposureTier.label}
           </span>
@@ -49,3 +49,4 @@ export function OpenTradesCard({ openTrades = 0, openExposure = 0, currency = "U
     </Card>
   );
 }
+

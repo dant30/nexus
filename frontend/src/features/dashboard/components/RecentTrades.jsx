@@ -45,13 +45,13 @@ export function RecentTrades({ trades = [], currency = "USD" }) {
         </div>
 
         <div className="flex items-center gap-2 text-[11px]">
-          <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-white/65">
+          <span className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-white/65">
             {trades.length} items
           </span>
-          <span className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2 py-1 text-emerald-300">
+          <span className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 text-emerald-300">
             {wins}W
           </span>
-          <span className="rounded-full border border-rose-400/20 bg-rose-400/10 px-2 py-1 text-rose-300">
+          <span className="rounded-full border border-rose-400/20 bg-rose-400/10 px-3 py-2 text-rose-300">
             {losses}L
           </span>
         </div>
@@ -109,7 +109,7 @@ export function RecentTrades({ trades = [], currency = "USD" }) {
                     </td>
                     <td className="px-3 py-2">
                       <span
-                        className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusClass(
+                        className={`inline-flex rounded-full border px-3 py-2 text-[11px] font-semibold ${statusClass(
                           trade.status
                         )}`}
                       >

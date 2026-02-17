@@ -23,14 +23,14 @@ export function ProfitCard({ totalProfit = 0, todayProfit = 0, roi = 0, currency
 
       <div className="relative flex items-start justify-between">
         <div className="min-w-0 flex-1">
-          <p className="mb-3 text-xs font-medium uppercase tracking-wider text-white/50">Net P/L</p>
+          <p className="mb-4 text-xs font-medium uppercase tracking-wider text-white/50">Net P/L</p>
 
           <p className={`text-2xl font-bold sm:text-3xl ${positive ? "text-emerald-300" : "text-rose-300"}`}>
             {positive ? "+" : ""}
             {formatMoney(totalProfit, currency)}
           </p>
 
-          <p className="mt-2 text-sm text-white/60">
+          <p className="mt-1 text-sm text-white/60">
             ROI: <span className={`font-semibold ${roiPositive ? "text-emerald-300" : "text-rose-300"}`}>{roiPositive ? "+" : ""}{roi.toFixed(2)}%</span>
           </p>
         </div>
@@ -56,3 +56,4 @@ export function ProfitCard({ totalProfit = 0, todayProfit = 0, roi = 0, currency
     </Card>
   );
 }
+
