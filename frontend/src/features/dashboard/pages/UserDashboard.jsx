@@ -1,5 +1,5 @@
-import React, { useMemo } from "react";
-import { RefreshCw, Activity, Clock3 } from "lucide-react";
+import React, { useMemo, useState } from "react";
+import { RefreshCw, Activity, Clock3, AlertCircle } from "lucide-react";
 import { useAuth } from "../../auth/contexts/AuthContext.jsx";
 import { useAccountContext } from "../../accounts/contexts/AccountContext.jsx";
 import { useTradingContext } from "../../trading/contexts/TradingContext.jsx";
@@ -34,6 +34,7 @@ export function UserDashboard() {
   const { trades, openTrades, loading, refresh } = useTradingContext();
   const { signals } = useSignals();
   const { connected } = useWebSocket();
+  const [refreshing, setRefreshing] = useState(false);
 
   const metrics = useMemo(() => {
     const allTrades = Array.isArray(trades) ? trades : [];
@@ -106,72 +107,114 @@ export function UserDashboard() {
     };
   }, [trades, openTrades]);
 
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await Promise.resolve(refresh?.());
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   const accountCurrency = activeAccount?.currency || "USD";
   const accountBalance = toNumber(activeAccount?.balance, 0);
-  const displayName = user?.deriv_full_name?.trim() || user?.first_name || user?.username || "Trader";
+  const displayName =
+    user?.deriv_full_name?.trim() || user?.first_name || user?.username || "Trader";
   const roi = metrics.totalStake > 0 ? (metrics.totalProfit / metrics.totalStake) * 100 : 0;
+  const accountReady = !!activeAccount?.id;
 
   return (
     <div className="space-y-6 p-4 text-white sm:p-6">
-      <Card className="border border-white/10 bg-gradient-to-r from-slate-900/70 via-slate-900/55 to-slate-900/40">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h2 className="text-xl font-semibold sm:text-2xl">Welcome back, {displayName}</h2>
-            <p className="mt-1 text-sm text-white/60">
-              Your live account pulse, trade quality, and execution readiness.
+      <Card className="border border-white/10 bg-gradient-to-r from-slate-900/70 via-slate-900/45 to-slate-900/70">
+        <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
+          <div className="flex-1">
+            <h2 className="text-2xl font-bold sm:text-3xl">Welcome back, {displayName}</h2>
+            <p className="mt-2 text-sm text-white/60 sm:text-base">
+              Your live account pulse, execution quality, and market position.
             </p>
-            <div className="mt-3 flex flex-wrap gap-2 text-xs">
-              <span className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/5 px-2.5 py-1 text-white/70">
-                <Activity size={12} /> {connected ? "Live connected" : "Live disconnected"}
-              </span>
-              <span className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/5 px-2.5 py-1 text-white/70">
-                <Clock3 size={12} /> 7-day view
-              </span>
-              <span className="inline-flex rounded-full border border-white/15 bg-white/5 px-2.5 py-1 text-white/70">
-                {metrics.totalTrades} closed trades analyzed
-              </span>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <div
+                className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium ${
+                  connected
+                    ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-300"
+                    : "border-amber-400/30 bg-amber-400/10 text-amber-300"
+                }`}
+              >
+                <div
+                  className={`h-2 w-2 rounded-full ${
+                    connected ? "bg-emerald-300 animate-pulse" : "bg-amber-300"
+                  }`}
+                />
+                {connected ? "Live connected" : "Reconnecting"}
+              </div>
+
+              <div className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/70">
+                <Clock3 size={12} />
+                7-day view
+              </div>
+
+              <div className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/70">
+                <Activity size={12} />
+                {metrics.totalTrades} closed trades
+              </div>
             </div>
           </div>
 
           <button
             type="button"
-            onClick={refresh}
-            disabled={loading}
-            className="inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-xs font-semibold text-white/85 transition hover:border-white/35 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+            onClick={handleRefresh}
+            disabled={loading || refreshing}
+            className="inline-flex items-center gap-2 rounded-lg border border-sky-400/35 bg-sky-400/10 px-4 py-2.5 text-xs font-semibold text-sky-300 transition hover:bg-sky-400/20 hover:border-sky-300/50 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
-            Refresh Dashboard
+            <RefreshCw size={16} className={loading || refreshing ? "animate-spin" : ""} />
+            Refresh
           </button>
         </div>
       </Card>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid auto-rows-max gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <BalanceCard
           balance={accountBalance}
           currency={accountCurrency}
           loading={balanceLoading}
           accountType={activeAccount?.account_type}
         />
-        <ProfitCard totalProfit={metrics.totalProfit} todayProfit={metrics.todayProfit} currency={accountCurrency} roi={roi} />
-        <WinRateCard winRate={metrics.winRate} wins={metrics.wins} losses={metrics.losses} total={metrics.totalTrades} />
-        <OpenTradesCard openTrades={metrics.openTrades} openExposure={metrics.openExposure} currency={accountCurrency} />
+        <ProfitCard
+          totalProfit={metrics.totalProfit}
+          todayProfit={metrics.todayProfit}
+          roi={roi}
+          currency={accountCurrency}
+        />
+        <WinRateCard
+          winRate={metrics.winRate}
+          wins={metrics.wins}
+          losses={metrics.losses}
+          total={metrics.totalTrades}
+        />
+        <OpenTradesCard
+          openTrades={metrics.openTrades}
+          openExposure={metrics.openExposure}
+          currency={accountCurrency}
+        />
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-3">
-        <div className="space-y-4 xl:col-span-2">
+      <div className="grid gap-6 xl:grid-cols-3">
+        <div className="space-y-6 xl:col-span-2">
           <PnLChart series={metrics.dailySeries} currency={accountCurrency} />
-          <div className="grid gap-4 lg:grid-cols-2">
+
+          <div className="grid gap-6 lg:grid-cols-2">
             <WinLossChart wins={metrics.wins} losses={metrics.losses} />
             <DailyPerformance series={metrics.dailySeries} />
           </div>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-6">
           <MarketOverview signals={signals} />
           <SystemHealth
             wsConnected={connected}
             tradeLoading={loading}
-            accountReady={!!activeAccount?.id}
+            accountReady={accountReady}
             activeAccountId={activeAccount?.deriv_account_id || activeAccount?.id}
           />
         </div>
@@ -180,6 +223,20 @@ export function UserDashboard() {
       <Card className="border border-white/10">
         <RecentTrades trades={metrics.recentClosed} currency={accountCurrency} />
       </Card>
+
+      {!accountReady ? (
+        <Card className="border border-amber-400/30 bg-amber-400/10">
+          <div className="flex items-start gap-3">
+            <AlertCircle size={20} className="mt-0.5 flex-shrink-0 text-amber-300" />
+            <div>
+              <p className="font-semibold text-amber-200">No Account Linked</p>
+              <p className="mt-1 text-sm text-amber-100/75">
+                Connect a Deriv account to start trading and unlock full performance metrics.
+              </p>
+            </div>
+          </div>
+        </Card>
+      ) : null}
     </div>
   );
 }

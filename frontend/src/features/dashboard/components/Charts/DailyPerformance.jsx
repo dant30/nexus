@@ -1,46 +1,78 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { Card } from "../../../../shared/components/ui/cards/Card.jsx";
 
 export function DailyPerformance({ series = [] }) {
+  const stats = useMemo(() => {
+    if (!series.length) return { best: null, worst: null, avgTrades: 0 };
+
+    const sorted = [...series].sort((a, b) => b.pnl - a.pnl);
+    const avgTrades =
+      series.reduce((sum, item) => sum + (item.wins || 0) + (item.losses || 0), 0) / series.length;
+
+    return {
+      best: sorted[0],
+      worst: sorted[sorted.length - 1],
+      avgTrades,
+    };
+  }, [series]);
+
   if (!series.length) {
     return (
       <Card>
-        <div className="mb-3 text-sm font-semibold text-white/80">Daily Outcomes</div>
-        <p className="text-xs text-white/55">No day-level outcomes yet.</p>
+        <div className="py-10 text-center">
+          <p className="text-sm font-semibold text-white/80">No Data</p>
+          <p className="mt-1 text-xs text-white/50">Daily performance tracking appears after closed trades</p>
+        </div>
       </Card>
     );
   }
 
-  const best = [...series].sort((a, b) => b.pnl - a.pnl)[0];
-  const worst = [...series].sort((a, b) => a.pnl - b.pnl)[0];
-
   return (
     <Card>
-      <div className="mb-3 text-sm font-semibold text-white/80">Daily Outcomes</div>
-      <div className="space-y-2">
-        {series.map((item) => {
-          const trades = item.wins + item.losses;
-          const bar = Math.min(100, trades * 20);
-          return (
-            <div key={item.key} className="rounded border border-white/10 bg-slate-900/40 px-3 py-2 text-xs">
-              <div className="mb-1 flex items-center justify-between">
-                <span className="text-white/60">{item.label}</span>
-                <span className="text-white/40">{trades} trades</span>
-              </div>
-              <div className="mb-2 h-1.5 w-full rounded bg-white/10">
-                <div className="h-1.5 rounded bg-sky-300" style={{ width: `${Math.max(6, bar)}%` }} />
-              </div>
-              <div className="flex gap-2">
-                <span className="rounded bg-emerald-400/15 px-2 py-0.5 text-emerald-300">W: {item.wins}</span>
-                <span className="rounded bg-rose-400/15 px-2 py-0.5 text-rose-300">L: {item.losses}</span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-semibold text-white/80">Daily Outcomes</p>
+          <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-xs font-medium text-white/60">
+            {series.length} days
+          </span>
+        </div>
 
-      <div className="mt-3 border-t border-white/10 pt-3 text-xs text-white/60">
-        Best: {best?.label || "-"} | Worst: {worst?.label || "-"}
+        <div className="space-y-2">
+          {series.map((item) => {
+            const wins = Number(item.wins || 0);
+            const losses = Number(item.losses || 0);
+            const totalTrades = wins + losses;
+            const winPct = totalTrades > 0 ? (wins / totalTrades) * 100 : 0;
+            const pnl = Number(item.pnl || 0);
+
+            return (
+              <div key={item.key} className="rounded-lg border border-white/10 bg-slate-900/40 px-3 py-2 text-xs">
+                <div className="mb-1.5 flex items-center justify-between">
+                  <p className="font-medium text-white/75">{item.label}</p>
+                  <p className={pnl >= 0 ? "font-semibold text-emerald-300" : "font-semibold text-rose-300"}>
+                    {pnl >= 0 ? "+" : ""}
+                    {pnl.toFixed(2)}
+                  </p>
+                </div>
+
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+                  <div className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-rose-500" style={{ width: `${Math.max(0, Math.min(100, winPct))}%` }} />
+                </div>
+
+                <div className="mt-2 flex items-center justify-between text-[11px] text-white/55">
+                  <span>{totalTrades} trades</span>
+                  <span>{wins}W / {losses}L</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="grid grid-cols-3 gap-2 border-t border-white/5 pt-3 text-xs text-white/60">
+          <div>Best: {stats.best?.label || "-"}</div>
+          <div>Worst: {stats.worst?.label || "-"}</div>
+          <div>Avg trades/day: {stats.avgTrades.toFixed(1)}</div>
+        </div>
       </div>
     </Card>
   );
