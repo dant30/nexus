@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { BotStatus } from "../components/BotControls/BotStatus.jsx";
 import { StakeSettings } from "../components/BotControls/StakeSettings.jsx";
 import { RiskLimits } from "../components/BotControls/RiskLimits.jsx";
@@ -67,6 +67,9 @@ export function AutoTrading() {
   const [sessionRealizedProfit, setSessionRealizedProfit] = useState(0);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [loading, setLoading] = useState(false);
+  const winAudioRef = useRef(null);
+  const lossAudioRef = useRef(null);
+  const playedSettlementRef = useRef(new Set());
 
   const { signals } = useSignals();
   useMarketData(market, timeframeSeconds);
@@ -141,6 +144,54 @@ export function AutoTrading() {
     });
     return () => off?.();
   }, [onMessage, setLastEvent, setRunning]);
+
+  useEffect(() => {
+    const winAudio = new Audio("/sounds/WON.mp3");
+    const lossAudio = new Audio("/sounds/LOST.mp3");
+    winAudio.preload = "auto";
+    lossAudio.preload = "auto";
+    winAudio.volume = 0.8;
+    lossAudio.volume = 0.8;
+    winAudioRef.current = winAudio;
+    lossAudioRef.current = lossAudio;
+    return () => {
+      winAudioRef.current = null;
+      lossAudioRef.current = null;
+      playedSettlementRef.current.clear();
+    };
+  }, []);
+
+  useEffect(() => {
+    const playSound = (audio) => {
+      if (!audio) return;
+      try {
+        audio.currentTime = 0;
+        const maybePromise = audio.play();
+        if (maybePromise?.catch) {
+          maybePromise.catch(() => {
+            // Ignore autoplay restrictions; next user interaction can unlock audio.
+          });
+        }
+      } catch {
+        // No-op
+      }
+    };
+
+    const offTradeStatus = onMessage("trade_status", (payload, message) => {
+      const status = String((payload || message || {}).status || "").toUpperCase();
+      const tradeId = (payload || message || {}).trade_id;
+      if (!tradeId || (status !== "WON" && status !== "LOST")) return;
+
+      const key = `${tradeId}:${status}`;
+      if (playedSettlementRef.current.has(key)) return;
+      playedSettlementRef.current.add(key);
+
+      if (status === "WON") playSound(winAudioRef.current);
+      if (status === "LOST") playSound(lossAudioRef.current);
+    });
+
+    return () => offTradeStatus?.();
+  }, [onMessage]);
 
   const activeSignal = useMemo(
     () => (signals || []).find((signal) => signal.symbol === market) || null,
