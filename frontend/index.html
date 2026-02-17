@@ -8,7 +8,7 @@
     <meta name="keywords" content="trading bot, algorithmic trading, automated trading, forex, crypto trading, binary options, trading signals, investment platform" />
     <meta name="theme-color" content="#0b0f1a" />
     <meta name="application-name" content="Nexus Trading Bot" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Nexus" />
 
@@ -37,7 +37,7 @@
 
     <!-- Icons & PWA -->
     <link rel="icon" href="/favicon.ico" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.json" />
 
     <!-- Fonts -->
@@ -79,9 +79,7 @@
     }
     </script>
 
-    <!-- Performance Optimization -->
-    <link rel="preload" href="/src/main.jsx" as="script" type="module" />
-    <link rel="preload" as="font" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" crossorigin />
+    <!-- Keep preloads minimal to avoid unused-preload and credential-mode warnings -->
   </head>
   <body class="bg-ink text-white antialiased">
     <!-- Main App Container -->

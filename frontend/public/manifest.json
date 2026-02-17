@@ -18,25 +18,25 @@
       "purpose": "any"
     },
     {
-      "src": "/icon-192.png",
+      "src": "/icons/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icon-512.png",
+      "src": "/icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icon-maskable-192.png",
+      "src": "/icons/icon-maskable-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "maskable"
     },
     {
-      "src": "/icon-maskable-512.png",
+      "src": "/icons/icon-maskable-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
@@ -44,13 +44,7 @@
   ],
   "screenshots": [
     {
-      "src": "/screenshot-narrow.png",
-      "sizes": "540x720",
-      "type": "image/png",
-      "form_factor": "narrow"
-    },
-    {
-      "src": "/screenshot-wide.png",
+      "src": "/icons/screenshot-wide.png",
       "sizes": "1280x720",
       "type": "image/png",
       "form_factor": "wide"
@@ -64,7 +58,7 @@
       "url": "/trading/auto",
       "icons": [
         {
-          "src": "/icon-shortcut-trading.png",
+          "src": "/icons/icon-shortcut-trading.png",
           "sizes": "192x192"
         }
       ]
@@ -76,7 +70,7 @@
       "url": "/trading/signals",
       "icons": [
         {
-          "src": "/icon-shortcut-signals.png",
+          "src": "/icons/icon-shortcut-signals.png",
           "sizes": "192x192"
         }
       ]
@@ -88,7 +82,7 @@
       "url": "/dashboard",
       "icons": [
         {
-          "src": "/icon-shortcut-dashboard.png",
+          "src": "/icons/icon-shortcut-dashboard.png",
           "sizes": "192x192"
         }
       ]

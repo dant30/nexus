@@ -9,8 +9,9 @@ const STATIC_ASSETS = [
   '/index.html',
   '/favicon.ico',
   '/manifest.json',
-  '/src/main.jsx',
-  'https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap',
+  '/icons/icon-192.png',
+  '/icons/icon-512.png',
+  '/icons/apple-touch-icon.png',
 ];
 
 const RUNTIME_CACHE = 'nexus-runtime';
@@ -238,8 +239,8 @@ self.addEventListener('push', (event) => {
     const data = event.data.json();
     const options = {
       body: data.body || 'New trading signal',
-      icon: '/icon-192.png',
-      badge: '/badge-72.png',
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-144.png',
       tag: data.tag || 'nexus-trading',
       requireInteraction: data.requireInteraction || false,
       vibrate: [200, 100, 200],
