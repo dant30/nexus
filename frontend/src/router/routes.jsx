@@ -5,7 +5,7 @@ import { OAuthCallback } from "../features/auth/pages/OAuthCallback.jsx";
 import { OAuthRedirect } from "../features/auth/pages/OAuthRedirect.jsx";
 import { UserDashboard } from "../features/dashboard/pages/UserDashboard.jsx";
 import { TradingDashboard } from "../features/trading/pages/TradingDashboard.jsx";
-import { AdminDashboard } from "../features/dashboard/pages/AdminDashboard.jsx";
+import { AdminDashboard } from "../features/admin/pages/AdminDashboard.jsx";
 import { NotificationCenter } from "../features/notifications/pages/NotificationCenter.jsx";
 import { ReferralDashboard } from "../features/referrals/pages/ReferralDashboard.jsx";
 import {
@@ -104,3 +104,4 @@ export const navigationRoutes = protectedRoutes
     label,
     meta,
   }));
+
