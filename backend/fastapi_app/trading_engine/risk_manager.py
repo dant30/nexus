@@ -590,8 +590,25 @@ class RiskManager:
 
             if normalized_profit > 0:
                 recovery.recovered_amount += normalized_profit
-                recovery.current_level = max(0, recovery.current_level - 1)
-                recovery.multiplier = self.fibonacci_sequence[recovery.current_level]
+                
+                # Calculate loss at current level
+                current_level_loss = recovery.initial_stake * self.fibonacci_sequence[recovery.current_level]
+                
+                # Only decrease level if we've recovered the loss from this level
+                # Using 50% threshold to be conservative - adjust as needed
+                if recovery.recovered_amount >= (recovery.loss_to_recover - (current_level_loss * Decimal("0.5"))):
+                    old_level = recovery.current_level
+                    recovery.current_level = max(0, recovery.current_level - 1)
+                    recovery.multiplier = self.fibonacci_sequence[recovery.current_level]
+                    log_info(
+                        "Recovery level decreased",
+                        account_id=account_id,
+                        old_level=old_level,
+                        new_level=recovery.current_level,
+                        new_multiplier=float(recovery.multiplier),
+                        recovered_amount=float(recovery.recovered_amount),
+                        loss_to_recover=float(recovery.loss_to_recover),
+                    )
 
             remaining = recovery.loss_to_recover - recovery.recovered_amount
             log_info(
@@ -605,15 +622,17 @@ class RiskManager:
 
             if recovery.recovered_amount >= recovery.loss_to_recover:
                 log_info(
-                    "Recovery completed",
+                    "🎉 Recovery completed successfully!",
                     account_id=account_id,
                     recovered_amount=float(recovery.recovered_amount),
                     loss_to_recover=float(recovery.loss_to_recover),
+                    final_level=recovery.current_level,
                 )
                 recovery = RecoveryState()
                 self._recovery_state[account_id] = recovery
                 await self._persist_recovery_state(account_id, recovery)
                 return
+            
             await self._persist_recovery_state(account_id, recovery)
             return
 
@@ -630,21 +649,31 @@ class RiskManager:
             recovery.loss_to_recover = loss_amount
             recovery.recovered_amount = Decimal("0")
             recovery.multiplier = self.fibonacci_sequence[recovery.current_level]
+            log_info(
+                "🔴 Recovery mode ACTIVATED",
+                account_id=account_id,
+                initial_loss=float(loss_amount),
+                recovery_level=recovery.current_level,
+                multiplier=float(recovery.multiplier),
+                base_stake=float(recovery.initial_stake),
+            )
         else:
             recovery.loss_to_recover += loss_amount
+            old_level = recovery.current_level
             recovery.current_level = min(recovery.current_level + 1, len(self.fibonacci_sequence) - 1)
             recovery.multiplier = self.fibonacci_sequence[recovery.current_level]
+            log_info(
+                "📉 Recovery debt increased",
+                account_id=account_id,
+                loss_amount=float(loss_amount),
+                loss_to_recover=float(recovery.loss_to_recover),
+                recovered_amount=float(recovery.recovered_amount),
+                old_level=old_level,
+                new_level=recovery.current_level,
+                new_multiplier=float(recovery.multiplier),
+                base_stake=float(recovery.initial_stake),
+            )
 
-        log_info(
-            "Recovery debt updated",
-            account_id=account_id,
-            loss_amount=float(loss_amount),
-            loss_to_recover=float(recovery.loss_to_recover),
-            recovered_amount=float(recovery.recovered_amount),
-            recovery_level=recovery.current_level,
-            multiplier=float(self.fibonacci_sequence[recovery.current_level]),
-            base_stake=float(recovery.initial_stake),
-        )
         self._recovery_state[account_id] = recovery
         await self._persist_recovery_state(account_id, recovery)
 
