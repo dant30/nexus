@@ -146,6 +146,20 @@ class Account(models.Model):
         decimal_places=6,
         default=Decimal("0"),
     )
+    recovery_state = models.CharField(max_length=20, default="normal")
+    recovery_locked_until = models.FloatField(blank=True, null=True)
+    recovery_panic_until = models.FloatField(blank=True, null=True)
+    recovery_peak_balance = models.DecimalField(
+        max_digits=20,
+        decimal_places=6,
+        blank=True,
+        null=True,
+    )
+    recovery_drawdown_pct = models.DecimalField(
+        max_digits=10,
+        decimal_places=6,
+        default=Decimal("0"),
+    )
 
     # =====================
     # TIMESTAMPS

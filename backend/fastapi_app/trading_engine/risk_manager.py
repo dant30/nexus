@@ -5,6 +5,8 @@ from decimal import Decimal
 from typing import Optional, List, Dict
 from dataclasses import dataclass, field
 from datetime import timedelta
+from enum import Enum
+import time
 
 from django_core.accounts.models import Account
 from django_core.trades.models import Trade
@@ -13,6 +15,14 @@ from django.utils import timezone
 from shared.utils.logger import log_error, log_info, get_logger
 
 logger = get_logger("risk")
+
+
+class RiskState(str, Enum):
+    """Risk system states."""
+    NORMAL = "normal"
+    RECOVERY = "recovery"
+    PANIC = "panic"
+    LOCKED = "locked"
 
 
 @dataclass
@@ -43,13 +53,18 @@ class RiskAssessment:
 
 @dataclass
 class RecoveryState:
-    """Stateful per-account recovery that persists across non-loss outcomes in-process."""
+    """Stateful per-account recovery."""
     active: bool = False
     initial_stake: Decimal = Decimal("0")
     current_level: int = 0
     multiplier: Decimal = Decimal("1.0")
     loss_to_recover: Decimal = Decimal("0")
     recovered_amount: Decimal = Decimal("0")
+    state: RiskState = RiskState.NORMAL
+    locked_until: Optional[float] = None
+    panic_until: Optional[float] = None
+    peak_balance: Optional[Decimal] = None
+    drawdown_pct: Decimal = Decimal("0")
 
 
 class RiskManager:
@@ -91,6 +106,7 @@ class RiskManager:
         max_daily_profit_percent: Optional[Decimal] = None,
         max_consecutive_losses: Optional[int] = None,
         fibonacci_sequence: Optional[List[Decimal]] = None,
+        smart_recovery: bool = True,
     ):
         """Initialize risk manager with configurable limits."""
         self.min_stake = min_stake or self.MIN_STAKE
@@ -101,6 +117,11 @@ class RiskManager:
         )
         self.max_consecutive_losses = max_consecutive_losses or self.MAX_CONSECUTIVE_LOSSES
         self.fibonacci_sequence = fibonacci_sequence or self.FIBONACCI_SEQUENCE
+        self.smart_recovery = smart_recovery
+        self.max_drawdown_pct = Decimal("0.15")
+        self.panic_drawdown_ratio = Decimal("0.8")
+        self.panic_lock_seconds = 1800
+        self.lock_auto_expiry_seconds = 3600
         self._outcome_cache: Dict[int, Dict[str, Decimal | int]] = {}
         self._recovery_state: Dict[int, RecoveryState] = {}
 
@@ -115,6 +136,11 @@ class RiskManager:
                 "recovery_multiplier",
                 "recovery_loss_to_recover",
                 "recovery_recovered_amount",
+                "recovery_state",
+                "recovery_locked_until",
+                "recovery_panic_until",
+                "recovery_peak_balance",
+                "recovery_drawdown_pct",
             ).first()
             if not account:
                 return RecoveryState()
@@ -126,7 +152,22 @@ class RiskManager:
                 multiplier=Decimal(str(account.recovery_multiplier or 1)),
                 loss_to_recover=Decimal(str(account.recovery_loss_to_recover or 0)),
                 recovered_amount=Decimal(str(account.recovery_recovered_amount or 0)),
+                state=(
+                    RiskState(str(account.recovery_state))
+                    if str(account.recovery_state) in {s.value for s in RiskState}
+                    else RiskState.NORMAL
+                ),
+                locked_until=(float(account.recovery_locked_until) if account.recovery_locked_until is not None else None),
+                panic_until=(float(account.recovery_panic_until) if account.recovery_panic_until is not None else None),
+                peak_balance=(
+                    Decimal(str(account.recovery_peak_balance))
+                    if account.recovery_peak_balance is not None
+                    else None
+                ),
+                drawdown_pct=Decimal(str(account.recovery_drawdown_pct or 0)),
             )
+            if state.active and state.state == RiskState.NORMAL:
+                state.state = RiskState.RECOVERY
             self._recovery_state[account_id] = state
             return state
         except Exception as exc:
@@ -146,9 +187,70 @@ class RiskManager:
                 recovery_multiplier=multiplier.quantize(Decimal("0.01")),
                 recovery_loss_to_recover=max(Decimal("0"), state.loss_to_recover).quantize(Decimal("0.000001")),
                 recovery_recovered_amount=max(Decimal("0"), state.recovered_amount).quantize(Decimal("0.000001")),
+                recovery_state=state.state.value,
+                recovery_locked_until=state.locked_until,
+                recovery_panic_until=state.panic_until,
+                recovery_peak_balance=state.peak_balance,
+                recovery_drawdown_pct=max(Decimal("0"), state.drawdown_pct).quantize(Decimal("0.000001")),
             )
         except Exception as exc:
             log_error("Failed to persist recovery state", account_id=account_id, exception=exc)
+
+    async def _check_drawdown(self, account: Account, current_balance: Decimal) -> None:
+        """Check if drawdown limits are exceeded and update account recovery state."""
+        recovery = self._recovery_state.get(account.id)
+        if not recovery:
+            return
+
+        now = time.time()
+        state_changed = False
+
+        if recovery.state == RiskState.LOCKED and recovery.locked_until and now >= recovery.locked_until:
+            recovery.state = RiskState.NORMAL
+            recovery.locked_until = None
+            state_changed = True
+
+        if recovery.state == RiskState.PANIC and recovery.panic_until and now >= recovery.panic_until:
+            recovery.state = RiskState.NORMAL
+            recovery.panic_until = None
+            state_changed = True
+
+        if not recovery.peak_balance or current_balance > recovery.peak_balance:
+            recovery.peak_balance = current_balance
+            recovery.drawdown_pct = Decimal("0")
+            if state_changed:
+                await self._persist_recovery_state(account.id, recovery)
+            return
+
+        if recovery.peak_balance and recovery.peak_balance > 0:
+            drawdown = (recovery.peak_balance - current_balance) / recovery.peak_balance
+            recovery.drawdown_pct = drawdown
+
+            if drawdown >= self.max_drawdown_pct:
+                recovery.state = RiskState.LOCKED
+                if self.lock_auto_expiry_seconds > 0:
+                    recovery.locked_until = now + self.lock_auto_expiry_seconds
+                log_error(
+                    "HARD DRAWDOWN REACHED - trading locked",
+                    account_id=account.id,
+                    drawdown=float(drawdown),
+                    peak=float(recovery.peak_balance),
+                    current=float(current_balance),
+                )
+                state_changed = True
+            elif drawdown >= self.max_drawdown_pct * self.panic_drawdown_ratio:
+                if recovery.state != RiskState.LOCKED:
+                    recovery.state = RiskState.PANIC
+                    recovery.panic_until = now + self.panic_lock_seconds
+                    log_info(
+                        "Panic mode activated - approaching drawdown limit",
+                        account_id=account.id,
+                        drawdown=float(drawdown),
+                    )
+                    state_changed = True
+
+        if state_changed:
+            await self._persist_recovery_state(account.id, recovery)
     
     async def assess_trade(
         self,
@@ -170,17 +272,38 @@ class RiskManager:
         consecutive_losses = await self._count_consecutive_losses(account)
         consecutive_wins = await self._count_consecutive_wins(account)
         recovery = await self._load_recovery_state(account.id)
+        await self._check_drawdown(account, Decimal(str(account.balance or 0)))
+        recovery = self._recovery_state.get(account.id, recovery)
         recovery_dirty = False
         recovery_level = 0
         recovery_stake = None
         check_stake = stake
 
+        now = time.time()
+        if recovery.state == RiskState.LOCKED:
+            if recovery.locked_until and now >= recovery.locked_until:
+                recovery.state = RiskState.NORMAL
+                recovery.locked_until = None
+                recovery_dirty = True
+            else:
+                issues.append("Trading locked due to drawdown protection")
+                risk_level = "CRITICAL"
+        elif recovery.state == RiskState.PANIC:
+            if recovery.panic_until and now >= recovery.panic_until:
+                recovery.state = RiskState.NORMAL
+                recovery.panic_until = None
+                recovery_dirty = True
+            else:
+                issues.append("Panic mode active: temporary trading pause")
+                risk_level = "CRITICAL"
+
         # If recovery state was lost (e.g. restart) but we still have an active loss streak,
         # bootstrap from recent consecutive losses.
-        if not recovery.active and consecutive_losses > 0:
+        if recovery.state != RiskState.LOCKED and not recovery.active and consecutive_losses > 0:
             losses = await self._get_recent_streak_losses(account, consecutive_losses)
             if losses:
                 recovery.active = True
+                recovery.state = RiskState.RECOVERY
                 recovery.initial_stake = stake
                 recovery.current_level = min(consecutive_losses, len(self.fibonacci_sequence) - 1)
                 recovery.multiplier = self.fibonacci_sequence[recovery.current_level]
@@ -196,7 +319,7 @@ class RiskManager:
                     loss_count=len(losses),
                 )
 
-        if recovery.active:
+        if recovery.active and recovery.state != RiskState.LOCKED:
             recovery_level = recovery.current_level
             multiplier = self.fibonacci_sequence[recovery_level]
             if recovery.multiplier != multiplier:
@@ -442,6 +565,7 @@ class RiskManager:
 
         if not recovery.active:
             recovery.active = True
+            recovery.state = RiskState.RECOVERY
             recovery.initial_stake = normalized_stake if normalized_stake > 0 else self.min_stake
             recovery.current_level = 1 if len(self.fibonacci_sequence) > 1 else 0
             recovery.loss_to_recover = loss_amount
@@ -464,6 +588,67 @@ class RiskManager:
         )
         self._recovery_state[account_id] = recovery
         await self._persist_recovery_state(account_id, recovery)
+
+    async def manual_unlock(self, account_id: int) -> bool:
+        """Manually unlock trading for an account."""
+        recovery = self._recovery_state.get(account_id)
+        if not recovery:
+            recovery = await self._load_recovery_state(account_id)
+        if recovery.state != RiskState.LOCKED:
+            return False
+
+        recovery.state = RiskState.NORMAL
+        recovery.locked_until = None
+        self._recovery_state[account_id] = recovery
+        await self._persist_recovery_state(account_id, recovery)
+        log_info("Manual unlock applied", account_id=account_id)
+        return True
+
+    async def get_net_daily_pnl(self, account: Account) -> Dict[str, Decimal | bool]:
+        """Calculate net daily profit/loss."""
+        daily_net = await self._calculate_daily_net_profit(account)
+        return {
+            "net_pnl": daily_net,
+            "is_profit": daily_net > 0,
+            "is_loss": daily_net < 0,
+            "abs_value": abs(daily_net),
+        }
+
+    def simulate_recovery_sequence(
+        self,
+        initial_loss: Decimal,
+        max_streak: int = 5,
+    ) -> List[Dict[str, Decimal | int | bool]]:
+        """Simulate a recovery sequence for testing."""
+        sequence: List[Dict[str, Decimal | int | bool]] = []
+        total_loss = Decimal(str(initial_loss))
+
+        for i in range(max_streak):
+            level = min(i, len(self.fibonacci_sequence) - 1)
+            multiplier = self.fibonacci_sequence[level]
+            next_stake = (self.MIN_STAKE * multiplier).quantize(Decimal("0.01"))
+
+            if self.smart_recovery:
+                target = (total_loss / Decimal("0.82")).quantize(Decimal("0.01"))
+                next_stake = max(next_stake, target)
+
+            potential_win = (next_stake * Decimal("0.82")).quantize(Decimal("0.01"))
+            net_if_win = (potential_win - total_loss).quantize(Decimal("0.01"))
+
+            sequence.append(
+                {
+                    "attempt": i + 1,
+                    "stake": next_stake,
+                    "total_loss": total_loss.quantize(Decimal("0.01")),
+                    "potential_win": potential_win,
+                    "net_if_win": net_if_win,
+                    "recovered": net_if_win > 0,
+                }
+            )
+
+            total_loss += next_stake
+
+        return sequence
     
     def _calculate_recommended_stake(self, account: Account) -> Decimal:
         """Calculate recommended stake based on account balance."""
