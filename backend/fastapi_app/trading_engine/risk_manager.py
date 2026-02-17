@@ -107,6 +107,8 @@ class RiskManager:
         max_consecutive_losses: Optional[int] = None,
         fibonacci_sequence: Optional[List[Decimal]] = None,
         smart_recovery: bool = True,
+        recovery_mode: str = "FIBONACCI",
+        recovery_multiplier: Decimal = Decimal("1.6"),
     ):
         """Initialize risk manager with configurable limits."""
         self.min_stake = min_stake or self.MIN_STAKE
@@ -118,12 +120,30 @@ class RiskManager:
         self.max_consecutive_losses = max_consecutive_losses or self.MAX_CONSECUTIVE_LOSSES
         self.fibonacci_sequence = fibonacci_sequence or self.FIBONACCI_SEQUENCE
         self.smart_recovery = smart_recovery
+        self.recovery_mode = str(recovery_mode or "FIBONACCI").upper()
+        if self.recovery_mode not in {"FIBONACCI", "HYBRID"}:
+            self.recovery_mode = "FIBONACCI"
+        self.recovery_multiplier = Decimal(str(recovery_multiplier or Decimal("1.6")))
         self.max_drawdown_pct = Decimal("0.15")
         self.panic_drawdown_ratio = Decimal("0.8")
         self.panic_lock_seconds = 1800
         self.lock_auto_expiry_seconds = 3600
         self._outcome_cache: Dict[int, Dict[str, Decimal | int]] = {}
         self._recovery_state: Dict[int, RecoveryState] = {}
+
+    def _calculate_hybrid_stake(
+        self,
+        base_stake: Decimal,
+        level: int,
+        recovery_multiplier: Optional[Decimal] = None,
+    ) -> Decimal:
+        """Calculate stake using hybrid Fibonacci + Martingale."""
+        fib_multiplier = self.fibonacci_sequence[min(level, len(self.fibonacci_sequence) - 1)]
+        martingale_factor = Decimal("1.0")
+        multiplier_value = Decimal(str(recovery_multiplier or self.recovery_multiplier))
+        if level >= 2:
+            martingale_factor = multiplier_value ** (level - 1)
+        return (base_stake * fib_multiplier * martingale_factor).quantize(Decimal("0.01"))
 
     @sync_to_async
     def _load_recovery_state(self, account_id: int) -> RecoveryState:
@@ -251,6 +271,25 @@ class RiskManager:
 
         if state_changed:
             await self._persist_recovery_state(account.id, recovery)
+
+    async def _check_day_rollover(self, account: Account) -> bool:
+        """Check if day has rolled over and reset daily protection context."""
+        recovery = self._recovery_state.get(account.id)
+        if not recovery:
+            return False
+
+        last_trade = await sync_to_async(
+            lambda: Trade.objects.filter(account=account).order_by("-created_at").first()
+        )()
+        if not last_trade:
+            return False
+
+        if last_trade.created_at.date() < timezone.now().date():
+            recovery.peak_balance = Decimal(str(account.balance or 0))
+            recovery.drawdown_pct = Decimal("0")
+            await self._persist_recovery_state(account.id, recovery)
+            return True
+        return False
     
     async def assess_trade(
         self,
@@ -260,6 +299,8 @@ class RiskManager:
         daily_profit_target: Optional[Decimal] = None,
         session_take_profit: Optional[Decimal] = None,
         session_profit: Optional[Decimal] = None,
+        recovery_mode: Optional[str] = None,
+        recovery_multiplier: Optional[Decimal] = None,
     ) -> RiskAssessment:
         """
         Comprehensive trade risk assessment.
@@ -269,9 +310,15 @@ class RiskManager:
         """
         issues = []
         risk_level = "LOW"
+        effective_recovery_mode = str(recovery_mode or self.recovery_mode).upper()
+        if effective_recovery_mode not in {"FIBONACCI", "HYBRID"}:
+            effective_recovery_mode = "FIBONACCI"
+        effective_recovery_multiplier = Decimal(str(recovery_multiplier or self.recovery_multiplier))
         consecutive_losses = await self._count_consecutive_losses(account)
         consecutive_wins = await self._count_consecutive_wins(account)
         recovery = await self._load_recovery_state(account.id)
+        await self._check_day_rollover(account)
+        recovery = self._recovery_state.get(account.id, recovery)
         await self._check_drawdown(account, Decimal(str(account.balance or 0)))
         recovery = self._recovery_state.get(account.id, recovery)
         recovery_dirty = False
@@ -321,20 +368,29 @@ class RiskManager:
 
         if recovery.active and recovery.state != RiskState.LOCKED:
             recovery_level = recovery.current_level
-            multiplier = self.fibonacci_sequence[recovery_level]
+            base_stake = recovery.initial_stake if recovery.initial_stake > 0 else stake
+            if effective_recovery_mode == "HYBRID":
+                recovery_stake = self._calculate_hybrid_stake(
+                    base_stake,
+                    recovery_level,
+                    recovery_multiplier=effective_recovery_multiplier,
+                )
+                multiplier = (recovery_stake / base_stake) if base_stake > 0 else Decimal("1.0")
+            else:
+                multiplier = self.fibonacci_sequence[recovery_level]
+                recovery_stake = (base_stake * multiplier).quantize(Decimal("0.01"))
             if recovery.multiplier != multiplier:
                 recovery.multiplier = multiplier
                 recovery_dirty = True
-            base_stake = recovery.initial_stake if recovery.initial_stake > 0 else stake
             if recovery.initial_stake <= 0:
                 recovery.initial_stake = stake
                 recovery_dirty = True
-            recovery_stake = (base_stake * multiplier).quantize(Decimal("0.01"))
             check_stake = recovery_stake
             log_info(
                 "Recovery mode active",
                 account_id=account.id,
                 recovery_level=recovery_level,
+                recovery_mode=effective_recovery_mode,
                 multiplier=float(multiplier),
                 requested_stake=float(stake),
                 recovery_stake=float(recovery_stake),
@@ -534,6 +590,8 @@ class RiskManager:
 
             if normalized_profit > 0:
                 recovery.recovered_amount += normalized_profit
+                recovery.current_level = max(0, recovery.current_level - 1)
+                recovery.multiplier = self.fibonacci_sequence[recovery.current_level]
 
             remaining = recovery.loss_to_recover - recovery.recovered_amount
             log_info(
@@ -542,6 +600,7 @@ class RiskManager:
                 recovered_amount=float(recovery.recovered_amount),
                 loss_to_recover=float(recovery.loss_to_recover),
                 remaining=float(max(Decimal("0"), remaining)),
+                recovery_level=recovery.current_level,
             )
 
             if recovery.recovered_amount >= recovery.loss_to_recover:

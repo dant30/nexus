@@ -12,6 +12,8 @@ const DEFAULT_TRADING_PREFERENCES = {
   maxTradesPerSession: 120,
   dailyProfitTarget: 0,
   sessionTakeProfit: 0,
+  recoveryMode: "FIBONACCI",
+  recoveryMultiplier: 1.6,
   timeframeSeconds: 60,
   signalsTimeframeSeconds: 0,
 };

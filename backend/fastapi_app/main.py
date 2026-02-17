@@ -258,6 +258,8 @@ async def _save_bot_state_to_db(user_id: int, account_id: int, bot_state: Dict):
         metadata["bot_risk"] = {
             "daily_profit_target": float(bot_state.get("daily_profit_target") or 0),
             "session_take_profit": float(bot_state.get("session_take_profit") or 0),
+            "recovery_mode": str(bot_state.get("recovery_mode") or "FIBONACCI").upper(),
+            "recovery_multiplier": float(bot_state.get("recovery_multiplier") or 1.6),
         }
         account.metadata = metadata
         
@@ -294,6 +296,8 @@ async def _load_bot_state_from_db(user_id: int, account_id: int) -> Optional[Dic
             "daily_loss_limit": float(account.bot_daily_loss_limit) if getattr(account, "bot_daily_loss_limit", None) else 0,
             "daily_profit_target": float(bot_risk.get("daily_profit_target") or 0),
             "session_take_profit": float(bot_risk.get("session_take_profit") or 0),
+            "recovery_mode": str(bot_risk.get("recovery_mode") or "FIBONACCI").upper(),
+            "recovery_multiplier": float(bot_risk.get("recovery_multiplier") or 1.6),
             "session_trades": 0,
             "session_realized_profit": 0,
             "cooldown_until": 0,
@@ -738,6 +742,8 @@ async def _maybe_execute_bot_trade(
                 daily_profit_target=Decimal(str(bot_state.get("daily_profit_target") or 0)),
                 session_take_profit=Decimal(str(bot_state.get("session_take_profit") or 0)),
                 session_profit=Decimal(str(bot_state.get("session_realized_profit") or 0)),
+                recovery_mode=str(bot_state.get("recovery_mode") or "FIBONACCI"),
+                recovery_multiplier=Decimal(str(bot_state.get("recovery_multiplier") or 1.6)),
             )
             bot_state["recovery_level"] = int(risk_assessment.recovery_level or 0)
             bot_state["consecutive_losses"] = int(risk_assessment.consecutive_losses or 0)
@@ -1310,6 +1316,8 @@ async def handle_ws_message(websocket: WebSocket, user_id: int, account_id: int,
             "daily_loss_limit": float(data.get("daily_loss_limit") or 0),
             "daily_profit_target": float(data.get("daily_profit_target") or 0),
             "session_take_profit": float(data.get("session_take_profit") or 0),
+            "recovery_mode": str(data.get("recovery_mode") or "FIBONACCI").upper(),
+            "recovery_multiplier": float(data.get("recovery_multiplier") or 1.6),
             "session_trades": 0,
             "session_realized_profit": 0,
             "cooldown_until": 0,
@@ -1404,6 +1412,8 @@ async def handle_ws_message(websocket: WebSocket, user_id: int, account_id: int,
                 "daily_loss_limit": bot_state["daily_loss_limit"],
                 "daily_profit_target": bot_state["daily_profit_target"],
                 "session_take_profit": bot_state["session_take_profit"],
+                "recovery_mode": bot_state.get("recovery_mode", "FIBONACCI"),
+                "recovery_multiplier": bot_state.get("recovery_multiplier", 1.6),
             }
         )
         
@@ -1489,6 +1499,8 @@ async def handle_ws_message(websocket: WebSocket, user_id: int, account_id: int,
                     "daily_loss_limit": bot_state.get("daily_loss_limit", 0),
                     "daily_profit_target": bot_state.get("daily_profit_target", 0),
                     "session_take_profit": bot_state.get("session_take_profit", 0),
+                    "recovery_mode": bot_state.get("recovery_mode", "FIBONACCI"),
+                    "recovery_multiplier": bot_state.get("recovery_multiplier", 1.6),
                     "session_realized_profit": bot_state.get("session_realized_profit", 0),
                     "recovery_level": bot_state.get("recovery_level", 0),
                     "consecutive_losses": bot_state.get("consecutive_losses", 0),

@@ -14,6 +14,8 @@ const RECOMMENDED_TRADING_PREFERENCES = {
   maxTradesPerSession: 120,
   dailyProfitTarget: 0,
   sessionTakeProfit: 0,
+  recoveryMode: "FIBONACCI",
+  recoveryMultiplier: 1.6,
   timeframeSeconds: 60,
   signalsTimeframeSeconds: 0,
 };
@@ -40,6 +42,8 @@ export function TradingPreferences() {
             ),
             dailyProfitTarget: Number(data.dailyProfitTarget || 0),
             sessionTakeProfit: Number(data.sessionTakeProfit || 0),
+            recoveryMode: String(data.recoveryMode || "FIBONACCI").toUpperCase(),
+            recoveryMultiplier: Number(data.recoveryMultiplier || 1.6),
             timeframeSeconds: Number(data.timeframeSeconds || 60),
             signalsTimeframeSeconds: Number(data.signalsTimeframeSeconds || 0),
           });
@@ -177,6 +181,34 @@ export function TradingPreferences() {
             value={form.sessionTakeProfit}
             onChange={(event) =>
               setForm((prev) => ({ ...prev, sessionTakeProfit: Number(event.target.value) }))
+            }
+            disabled={loading}
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-semibold text-white/70">Recovery Mode</label>
+          <Select
+            value={form.recoveryMode}
+            onChange={(event) =>
+              setForm((prev) => ({ ...prev, recoveryMode: String(event.target.value).toUpperCase() }))
+            }
+            disabled={loading}
+          >
+            <option value="FIBONACCI">Fibonacci</option>
+            <option value="HYBRID">Hybrid (Fib + Martingale)</option>
+          </Select>
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-semibold text-white/70">
+            Recovery Multiplier
+          </label>
+          <Input
+            type="number"
+            min="1"
+            step="0.1"
+            value={form.recoveryMultiplier}
+            onChange={(event) =>
+              setForm((prev) => ({ ...prev, recoveryMultiplier: Number(event.target.value) }))
             }
             disabled={loading}
           />

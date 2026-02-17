@@ -50,6 +50,8 @@ export function AutoTrading() {
   const [dailyLimit, setDailyLimit] = useState(50);
   const [dailyProfitTarget, setDailyProfitTarget] = useState(0);
   const [sessionTakeProfit, setSessionTakeProfit] = useState(0);
+  const [recoveryMode, setRecoveryMode] = useState("FIBONACCI");
+  const [recoveryMultiplier, setRecoveryMultiplier] = useState(1.6);
   const [durationValue, setDurationValue] = useState(1);
   const [durationUnit, setDurationUnit] = useState("ticks");
   const [cooldownSeconds, setCooldownSeconds] = useState(10);
@@ -79,6 +81,8 @@ export function AutoTrading() {
         setDailyLimit(Number(risk?.dailyLossLimit || 0));
         setDailyProfitTarget(Number(trading?.dailyProfitTarget || 0));
         setSessionTakeProfit(Number(trading?.sessionTakeProfit || 0));
+        setRecoveryMode(String(trading?.recoveryMode || "FIBONACCI").toUpperCase());
+        setRecoveryMultiplier(Number(trading?.recoveryMultiplier || 1.6));
         setCooldownSeconds(Number(trading?.cooldownSeconds || 10));
         setMaxTradesPerSession(Number(trading?.maxTradesPerSession || 120));
         setMinConfidence(Number(trading?.minSignalConfidence || TRADING.MIN_SIGNAL_CONFIDENCE));
@@ -124,6 +128,12 @@ export function AutoTrading() {
       }
       if (typeof status.session_realized_profit === "number") {
         setSessionRealizedProfit(status.session_realized_profit);
+      }
+      if (typeof status.recovery_mode === "string") {
+        setRecoveryMode(String(status.recovery_mode).toUpperCase());
+      }
+      if (typeof status.recovery_multiplier === "number") {
+        setRecoveryMultiplier(status.recovery_multiplier);
       }
       if (status.state === "stopped") {
         setRunning(false);
@@ -187,6 +197,8 @@ export function AutoTrading() {
         daily_loss_limit: Math.max(0, toNumber(dailyLimit, 0)),
         daily_profit_target: Math.max(0, toNumber(dailyProfitTarget, 0)),
         session_take_profit: Math.max(0, toNumber(sessionTakeProfit, 0)),
+        recovery_mode: String(recoveryMode || "FIBONACCI").toUpperCase(),
+        recovery_multiplier: Math.max(1, toNumber(recoveryMultiplier, 1.6)),
       });
       setRunning(true);
       setLastEvent({
@@ -294,18 +306,44 @@ export function AutoTrading() {
             </button>
           </div>
           {showAdvanced ? (
-            <div>
-              <label className="mb-1 block text-xs font-semibold text-white/70">
-                Max Trades / Session
-              </label>
-              <Input
-                type="number"
-                min="1"
-                step="1"
-                value={maxTradesPerSession}
-                onChange={(event) => setMaxTradesPerSession(event.target.value)}
-              />
-            </div>
+            <>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-white/70">
+                  Max Trades / Session
+                </label>
+                <Input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={maxTradesPerSession}
+                  onChange={(event) => setMaxTradesPerSession(event.target.value)}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-white/70">
+                  Recovery Mode
+                </label>
+                <Select
+                  value={recoveryMode}
+                  onChange={(event) => setRecoveryMode(String(event.target.value).toUpperCase())}
+                >
+                  <option value="FIBONACCI">Fibonacci</option>
+                  <option value="HYBRID">Hybrid (Fib + Martingale)</option>
+                </Select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-white/70">
+                  Recovery Multiplier
+                </label>
+                <Input
+                  type="number"
+                  min="1"
+                  step="0.1"
+                  value={recoveryMultiplier}
+                  onChange={(event) => setRecoveryMultiplier(event.target.value)}
+                />
+              </div>
+            </>
           ) : null}
           <div>
             <label className="mb-1 block text-xs font-semibold text-white/70">
