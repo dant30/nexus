@@ -21,26 +21,33 @@ const resolveDirection = (signal) => {
   return "NEUTRAL";
 };
 
+const confidenceTier = (value) => {
+  if (value >= 0.8) return "Strong";
+  if (value >= 0.6) return "Moderate";
+  return "Weak";
+};
+
 export function MarketOverview({ signals = [] }) {
-  const rows = (signals || []).slice(0, 5).map((signal, index) => {
-    const direction = resolveDirection(signal);
-    const confidence = toNumber(
-      signal?.consensus?.confidence ?? signal?.confidence,
-      0
-    );
-    return {
-      id: signal?.id || `${signal?.symbol || "symbol"}-${index}`,
-      symbol: signal?.symbol || "N/A",
-      direction,
-      confidence,
-    };
-  });
+  const rows = (signals || [])
+    .slice(0, 8)
+    .map((signal, index) => {
+      const direction = resolveDirection(signal);
+      const confidence = toNumber(signal?.consensus?.confidence ?? signal?.confidence, 0);
+      return {
+        id: signal?.id || `${signal?.symbol || "symbol"}-${index}`,
+        symbol: signal?.symbol || "N/A",
+        direction,
+        confidence,
+      };
+    })
+    .sort((a, b) => b.confidence - a.confidence)
+    .slice(0, 5);
 
   return (
     <Card>
       <div className="mb-3 flex items-center justify-between">
         <p className="text-sm font-semibold text-white/80">Market Overview</p>
-        <span className="text-xs text-white/50">{rows.length} tracked</span>
+        <span className="text-xs text-white/50">{rows.length} prioritized</span>
       </div>
 
       {!rows.length ? (
@@ -50,12 +57,10 @@ export function MarketOverview({ signals = [] }) {
           {rows.map((row) => {
             const isRise = row.direction === "RISE";
             const isFall = row.direction === "FALL";
+            const pct = Math.max(0, Math.min(100, row.confidence * 100));
             return (
-              <div
-                key={row.id}
-                className="rounded-md border border-white/10 bg-slate-900/50 px-3 py-2 text-xs"
-              >
-                <div className="flex items-center justify-between">
+              <div key={row.id} className="rounded-md border border-white/10 bg-slate-900/50 px-3 py-2 text-xs">
+                <div className="flex items-center justify-between gap-2">
                   <p className="font-semibold text-white/90">{row.symbol}</p>
                   <span
                     className={[
@@ -72,8 +77,16 @@ export function MarketOverview({ signals = [] }) {
                     {row.direction}
                   </span>
                 </div>
+
+                <div className="mt-2 h-1.5 w-full rounded bg-white/10">
+                  <div
+                    className={isRise ? "h-1.5 rounded bg-emerald-300" : isFall ? "h-1.5 rounded bg-rose-300" : "h-1.5 rounded bg-white/40"}
+                    style={{ width: `${Math.max(4, pct)}%` }}
+                  />
+                </div>
+
                 <p className="mt-1 text-white/60">
-                  Confidence: {(row.confidence * 100).toFixed(1)}%
+                  Confidence: {pct.toFixed(1)}% ({confidenceTier(row.confidence)})
                 </p>
               </div>
             );

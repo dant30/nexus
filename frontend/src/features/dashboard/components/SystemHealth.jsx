@@ -18,9 +18,27 @@ export function SystemHealth({
   accountReady = false,
   activeAccountId = null,
 }) {
+  const checks = [wsConnected, !tradeLoading, accountReady];
+  const healthy = checks.filter(Boolean).length;
+  const healthPct = Math.round((healthy / checks.length) * 100);
+
   return (
     <Card>
-      <div className="mb-3 text-sm font-semibold text-white/80">System Health</div>
+      <div className="mb-3 flex items-center justify-between">
+        <div className="text-sm font-semibold text-white/80">System Health</div>
+        <span
+          className={`rounded px-2 py-0.5 text-[11px] font-semibold ${
+            healthPct >= 100
+              ? "bg-emerald-400/15 text-emerald-300"
+              : healthPct >= 66
+              ? "bg-amber-400/15 text-amber-300"
+              : "bg-rose-400/15 text-rose-300"
+          }`}
+        >
+          {healthPct}% healthy
+        </span>
+      </div>
+
       <div className="space-y-2 text-xs">
         <div className="flex items-center justify-between">
           <span className="text-white/60">WebSocket</span>
@@ -35,6 +53,7 @@ export function SystemHealth({
           <StatusBadge ok={accountReady} label={accountReady ? "Ready" : "Missing"} />
         </div>
       </div>
+
       <div className="mt-3 border-t border-white/10 pt-3 text-xs text-white/50">
         Active account: {activeAccountId || "N/A"}
       </div>

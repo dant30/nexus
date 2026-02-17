@@ -9,6 +9,9 @@ const formatMoney = (value, currency = "USD") =>
   })} ${currency}`.trim();
 
 export function OpenTradesCard({ openTrades = 0, openExposure = 0, currency = "USD" }) {
+  const avgExposure = openTrades > 0 ? openExposure / openTrades : 0;
+  const exposureTier = openTrades === 0 ? "Idle" : avgExposure > 10 ? "High" : "Controlled";
+
   return (
     <Card>
       <div className="flex items-start justify-between">
@@ -20,6 +23,10 @@ export function OpenTradesCard({ openTrades = 0, openExposure = 0, currency = "U
         <div className="rounded-lg bg-violet-400/15 p-2 text-violet-300">
           <Layers size={18} />
         </div>
+      </div>
+
+      <div className="mt-3 border-t border-white/10 pt-3 text-xs text-white/60">
+        Exposure profile: {exposureTier}
       </div>
     </Card>
   );

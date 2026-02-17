@@ -2,8 +2,15 @@ import React from "react";
 import { Target } from "lucide-react";
 import { Card } from "../../../../shared/components/ui/cards/Card.jsx";
 
+const qualityLabel = (value) => {
+  if (value >= 70) return "Strong";
+  if (value >= 50) return "Balanced";
+  return "Needs tuning";
+};
+
 export function WinRateCard({ winRate = 0, wins = 0, losses = 0, total = 0 }) {
   const clamped = Math.max(0, Math.min(100, winRate));
+
   return (
     <Card>
       <div className="flex items-start justify-between">
@@ -16,10 +23,15 @@ export function WinRateCard({ winRate = 0, wins = 0, losses = 0, total = 0 }) {
           <Target size={18} />
         </div>
       </div>
+
       <div className="mt-3 h-2 w-full rounded bg-white/10">
         <div className="h-2 rounded bg-sky-300 transition-all" style={{ width: `${clamped}%` }} />
       </div>
-      <p className="mt-2 text-xs text-white/50">{total} closed trades</p>
+
+      <div className="mt-2 flex items-center justify-between text-xs">
+        <span className="text-white/50">{total} closed trades</span>
+        <span className="text-sky-200/80">{qualityLabel(clamped)}</span>
+      </div>
     </Card>
   );
 }

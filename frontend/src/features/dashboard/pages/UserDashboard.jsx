@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, Activity, Clock3 } from "lucide-react";
 import { useAuth } from "../../auth/contexts/AuthContext.jsx";
 import { useAccountContext } from "../../accounts/contexts/AccountContext.jsx";
 import { useTradingContext } from "../../trading/contexts/TradingContext.jsx";
@@ -43,10 +43,7 @@ export function UserDashboard() {
 
     const totalProfit = closedTrades.reduce((sum, trade) => sum + toNumber(trade.profit, 0), 0);
     const totalStake = closedTrades.reduce((sum, trade) => sum + toNumber(trade.stake, 0), 0);
-    const openExposure = (openTrades || []).reduce(
-      (sum, trade) => sum + toNumber(trade.stake, 0),
-      0
-    );
+    const openExposure = (openTrades || []).reduce((sum, trade) => sum + toNumber(trade.stake, 0), 0);
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -64,8 +61,15 @@ export function UserDashboard() {
       const keyDate = new Date(start);
       keyDate.setDate(start.getDate() + i);
       const key = keyDate.toISOString().slice(0, 10);
-      dayMap.set(key, { key, label: keyDate.toLocaleDateString(undefined, { weekday: "short" }), pnl: 0, wins: 0, losses: 0 });
+      dayMap.set(key, {
+        key,
+        label: keyDate.toLocaleDateString(undefined, { weekday: "short" }),
+        pnl: 0,
+        wins: 0,
+        losses: 0,
+      });
     }
+
     closedTrades.forEach((trade) => {
       const ts = parseTradeTime(trade);
       if (!ts) return;
@@ -80,7 +84,11 @@ export function UserDashboard() {
 
     const dailySeries = Array.from(dayMap.values());
     const recentClosed = [...closedTrades]
-      .sort((a, b) => toNumber(new Date(b.created_at).getTime(), 0) - toNumber(new Date(a.created_at).getTime(), 0))
+      .sort(
+        (a, b) =>
+          toNumber(new Date(b.created_at).getTime(), 0) -
+          toNumber(new Date(a.created_at).getTime(), 0)
+      )
       .slice(0, 8);
 
     return {
@@ -100,28 +108,42 @@ export function UserDashboard() {
 
   const accountCurrency = activeAccount?.currency || "USD";
   const accountBalance = toNumber(activeAccount?.balance, 0);
-  const displayName =
-    user?.deriv_full_name?.trim() || user?.first_name || user?.username || "Trader";
+  const displayName = user?.deriv_full_name?.trim() || user?.first_name || user?.username || "Trader";
+  const roi = metrics.totalStake > 0 ? (metrics.totalProfit / metrics.totalStake) * 100 : 0;
 
   return (
-    <div className="space-y-6 p-6 text-white">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-xl font-semibold">Welcome back, {displayName}</h2>
-          <p className="text-sm text-white/60">
-            Account overview, performance, and execution health in one place.
-          </p>
+    <div className="space-y-6 p-4 text-white sm:p-6">
+      <Card className="border border-white/10 bg-gradient-to-r from-slate-900/70 via-slate-900/55 to-slate-900/40">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-semibold sm:text-2xl">Welcome back, {displayName}</h2>
+            <p className="mt-1 text-sm text-white/60">
+              Your live account pulse, trade quality, and execution readiness.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2 text-xs">
+              <span className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/5 px-2.5 py-1 text-white/70">
+                <Activity size={12} /> {connected ? "Live connected" : "Live disconnected"}
+              </span>
+              <span className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/5 px-2.5 py-1 text-white/70">
+                <Clock3 size={12} /> 7-day view
+              </span>
+              <span className="inline-flex rounded-full border border-white/15 bg-white/5 px-2.5 py-1 text-white/70">
+                {metrics.totalTrades} closed trades analyzed
+              </span>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={refresh}
+            disabled={loading}
+            className="inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-xs font-semibold text-white/85 transition hover:border-white/35 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+            Refresh Dashboard
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={refresh}
-          disabled={loading}
-          className="inline-flex items-center gap-2 rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-xs font-semibold text-white/80 transition hover:border-white/30 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
-          Refresh
-        </button>
-      </div>
+      </Card>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <BalanceCard
@@ -130,23 +152,9 @@ export function UserDashboard() {
           loading={balanceLoading}
           accountType={activeAccount?.account_type}
         />
-        <ProfitCard
-          totalProfit={metrics.totalProfit}
-          todayProfit={metrics.todayProfit}
-          currency={accountCurrency}
-          roi={metrics.totalStake > 0 ? (metrics.totalProfit / metrics.totalStake) * 100 : 0}
-        />
-        <WinRateCard
-          winRate={metrics.winRate}
-          wins={metrics.wins}
-          losses={metrics.losses}
-          total={metrics.totalTrades}
-        />
-        <OpenTradesCard
-          openTrades={metrics.openTrades}
-          openExposure={metrics.openExposure}
-          currency={accountCurrency}
-        />
+        <ProfitCard totalProfit={metrics.totalProfit} todayProfit={metrics.todayProfit} currency={accountCurrency} roi={roi} />
+        <WinRateCard winRate={metrics.winRate} wins={metrics.wins} losses={metrics.losses} total={metrics.totalTrades} />
+        <OpenTradesCard openTrades={metrics.openTrades} openExposure={metrics.openExposure} currency={accountCurrency} />
       </div>
 
       <div className="grid gap-4 xl:grid-cols-3">
@@ -157,6 +165,7 @@ export function UserDashboard() {
             <DailyPerformance series={metrics.dailySeries} />
           </div>
         </div>
+
         <div className="space-y-4">
           <MarketOverview signals={signals} />
           <SystemHealth
@@ -168,7 +177,7 @@ export function UserDashboard() {
         </div>
       </div>
 
-      <Card>
+      <Card className="border border-white/10">
         <RecentTrades trades={metrics.recentClosed} currency={accountCurrency} />
       </Card>
     </div>

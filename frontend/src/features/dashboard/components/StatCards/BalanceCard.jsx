@@ -14,14 +14,15 @@ export function BalanceCard({ balance = 0, currency = "USD", loading = false, ac
       <div className="flex items-start justify-between">
         <div>
           <p className="text-xs uppercase tracking-wider text-white/50">Balance</p>
-          <p className="mt-2 text-2xl font-semibold text-white">
-            {loading ? "Updating..." : formatMoney(balance, currency)}
-          </p>
+          <p className="mt-2 text-2xl font-semibold text-white">{loading ? "Updating..." : formatMoney(balance, currency)}</p>
           <p className="mt-1 text-xs text-white/50">{accountType || "Deriv account"}</p>
         </div>
         <div className="rounded-lg bg-emerald-400/15 p-2 text-emerald-300">
           <Wallet size={18} />
         </div>
+      </div>
+      <div className="mt-3 border-t border-white/10 pt-3 text-xs text-white/60">
+        {loading ? "Fetching latest balance..." : "Funds available for execution"}
       </div>
     </Card>
   );
