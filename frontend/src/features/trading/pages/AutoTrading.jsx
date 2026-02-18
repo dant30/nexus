@@ -3,7 +3,6 @@ import {
   BotStatus,
   StakeSettings,
   RiskLimits,
-  StrategySelector,
   TradeButton,
   MarketSelector,
   SignalDisplay,
@@ -54,7 +53,6 @@ export function AutoTrading() {
   const { sendMessage, connected, onMessage } = useWebSocket();
 
   const [market, setMarket] = useState("R_50");
-  const [strategy, setStrategy] = useState("scalping");
   const [stake, setStake] = useState(1);
   const [dailyLimit, setDailyLimit] = useState(50);
   const [dailyProfitTarget, setDailyProfitTarget] = useState(0);
@@ -250,7 +248,7 @@ export function AutoTrading() {
 
       sendMessage("bot_start", {
         symbol: market,
-        strategy,
+        strategy: "consensus",
         interval: timeframeSeconds,
         stake: Number(normalizedStake),
         duration: Math.max(1, Math.floor(toNumber(durationValue, 1))),
@@ -269,7 +267,7 @@ export function AutoTrading() {
       });
       setRunning(true);
       setLastEvent({
-        message: `Bot started on ${market} (${strategy}, ${tradeType}).`,
+        message: `Bot started on ${market} (${tradeType}, consensus).`,
         timestamp: Date.now(),
       });
     } finally {
@@ -282,9 +280,8 @@ export function AutoTrading() {
       <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
         <Card className="space-y-4">
           <div className="text-sm font-semibold text-white/80">Auto Trading</div>
-          <div className="grid gap-3 md:grid-cols-2">
+          <div>
             <MarketSelector value={market} onChange={setMarket} />
-            <StrategySelector value={strategy} onChange={setStrategy} />
           </div>
           <div className="grid grid-cols-[2fr_1fr] gap-3">
             <div>
