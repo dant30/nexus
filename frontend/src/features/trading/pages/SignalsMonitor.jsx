@@ -8,8 +8,13 @@ import { Select } from "../../../shared/components/ui/inputs/Select.jsx";
 import { useTradingContext } from "../contexts/TradingContext.jsx";
 
 export function SignalsMonitor() {
-  const { signals, loading } = useSignals();
   const { signalsTimeframeSeconds, setSignalsTimeframeSeconds } = useTradingContext();
+  const activeInterval = signalsTimeframeSeconds > 0 ? signalsTimeframeSeconds : 60;
+  const { signals, loading } = useSignals({
+    liveMonitor: true,
+    intervalSeconds: activeInterval,
+  });
+
   const timeframeLabel = `${Math.max(1, Math.round(signalsTimeframeSeconds / 60))}m`;
   const filteredSignals =
     signalsTimeframeSeconds === 0
