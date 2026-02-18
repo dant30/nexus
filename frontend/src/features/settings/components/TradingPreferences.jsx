@@ -18,6 +18,7 @@ const RECOMMENDED_TRADING_PREFERENCES = {
   recoveryMultiplier: 1.6,
   timeframeSeconds: 60,
   signalsTimeframeSeconds: 0,
+  defaultSymbol: "R_50",
 };
 
 export function TradingPreferences() {
@@ -46,6 +47,7 @@ export function TradingPreferences() {
             recoveryMultiplier: Number(data.recoveryMultiplier || 1.6),
             timeframeSeconds: Number(data.timeframeSeconds || 60),
             signalsTimeframeSeconds: Number(data.signalsTimeframeSeconds || 0),
+            defaultSymbol: String(data.defaultSymbol || "R_50").toUpperCase(),
           });
         }
       } catch (error) {
@@ -266,3 +268,5 @@ export function TradingPreferences() {
     </form>
   );
 }
+
+

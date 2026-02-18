@@ -2,24 +2,7 @@ import React from "react";
 import { ArrowUpRight, ArrowDownRight, Activity } from "lucide-react";
 import { Card } from "../../../shared/components/ui/cards/Card.jsx";
 import { Empty } from "../../../shared/components/ui/misc/Empty.jsx";
-
-const toNumber = (value, fallback = 0) => {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : fallback;
-};
-
-const resolveDirection = (signal) => {
-  const raw =
-    signal?.direction ||
-    signal?.decision ||
-    signal?.signal ||
-    signal?.consensus?.decision ||
-    signal?.consensus?.direction;
-  const value = String(raw || "").toUpperCase();
-  if (value.includes("FALL") || value.includes("PUT")) return "FALL";
-  if (value.includes("RISE") || value.includes("CALL")) return "RISE";
-  return "NEUTRAL";
-};
+import { buildRankedSignals } from "../../trading/utils/signalRanking.js";
 
 const confidenceTier = (value) => {
   if (value >= 0.8) return { label: "Strong", className: "text-emerald-300" };
@@ -27,28 +10,12 @@ const confidenceTier = (value) => {
   return { label: "Weak", className: "text-amber-300" };
 };
 
-export function MarketOverview({ signals = [] }) {
-  const rows = (signals || [])
-    .slice(0, 8)
-    .map((signal, index) => {
-      const direction = resolveDirection(signal);
-      const confidence = toNumber(signal?.consensus?.confidence ?? signal?.confidence, 0);
-      return {
-        id: signal?.id || `${signal?.symbol || "symbol"}-${index}`,
-        symbol:
-          signal?.symbol ||
-          signal?.underlying ||
-          signal?.shortcode ||
-          signal?.market_symbol ||
-          signal?.metadata?.symbol ||
-          signal?.meta?.symbol ||
-          "R_50",
-        direction,
-        confidence,
-      };
-    })
-    .sort((a, b) => b.confidence - a.confidence)
-    .slice(0, 5);
+export function MarketOverview({ signals = [], defaultSymbol = "R_50" }) {
+  const rows = buildRankedSignals(signals, {
+    defaultSymbol,
+    mode: "all",
+    limit: 5,
+  });
 
   return (
     <Card className="group relative overflow-hidden">
@@ -58,11 +25,11 @@ export function MarketOverview({ signals = [] }) {
         <div className="mb-4 flex items-center justify-between">
           <div>
             <p className="text-sm font-semibold text-white/80">Market Overview</p>
-            <p className="mt-1 text-xs text-white/50">Top live opportunities ranked by confidence</p>
+            <p className="mt-1 text-xs text-white/50">Top symbol comparison by signal confidence</p>
           </div>
           <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-white/60">
             <Activity size={12} />
-            {rows.length} prioritized
+            {rows.length} ranked
           </span>
         </div>
 
@@ -75,16 +42,23 @@ export function MarketOverview({ signals = [] }) {
             {rows.map((row) => {
               const isRise = row.direction === "RISE";
               const isFall = row.direction === "FALL";
-              const pct = Math.max(0, Math.min(100, row.confidence * 100));
+              const pct = Math.max(0, Math.min(100, row.confidencePct));
               const tier = confidenceTier(row.confidence);
 
               return (
                 <div
-                  key={row.id}
+                  key={row.id || `${row.symbol}-${row.rank}`}
                   className="rounded-lg border border-white/10 bg-slate-900/45 px-3 py-2.5 text-xs transition hover:border-white/20 hover:bg-slate-900/60"
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <p className="font-semibold text-white/90">{row.symbol}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="font-semibold text-white/90">{row.symbol}</p>
+                      {row.symbol === defaultSymbol ? (
+                        <span className="rounded-full border border-sky-400/35 bg-sky-400/10 px-2 py-1 text-[10px] font-semibold text-sky-300">
+                          Default
+                        </span>
+                      ) : null}
+                    </div>
                     <span
                       className={[
                         "inline-flex items-center gap-1 rounded-full px-3 py-2 text-[11px] font-semibold",
@@ -116,7 +90,9 @@ export function MarketOverview({ signals = [] }) {
 
                   <div className="mt-1.5 flex items-center justify-between">
                     <p className="text-white/60">Confidence: {pct.toFixed(1)}%</p>
-                    <p className={`font-semibold ${tier.className}`}>{tier.label}</p>
+                    <p className={`font-semibold ${tier.className}`}>
+                      {row.rank === 1 ? tier.label : `-${row.confidenceGapPct.toFixed(1)}%`}
+                    </p>
                   </div>
                 </div>
               );

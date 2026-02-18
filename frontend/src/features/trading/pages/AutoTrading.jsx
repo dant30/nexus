@@ -100,6 +100,9 @@ export function AutoTrading() {
         setCooldownSeconds(Number(trading?.cooldownSeconds || 10));
         setMaxTradesPerSession(Number(trading?.maxTradesPerSession || 120));
         setMinConfidence(Number(trading?.minSignalConfidence || TRADING.MIN_SIGNAL_CONFIDENCE));
+        if (trading?.defaultSymbol) {
+          setMarket(String(trading.defaultSymbol).toUpperCase());
+        }
       } catch (_) {
         // Keep built-in defaults when settings are unavailable.
       }
@@ -465,6 +468,8 @@ export function AutoTrading() {
     </div>
   );
 }
+
+
 
 
 

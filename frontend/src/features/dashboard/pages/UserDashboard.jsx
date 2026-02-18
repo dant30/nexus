@@ -1,10 +1,11 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { RefreshCw, Clock3, AlertCircle } from "lucide-react";
 import { useAuth } from "../../auth/contexts/AuthContext.jsx";
 import { useAccountContext } from "../../accounts/contexts/AccountContext.jsx";
 import { useTradingContext } from "../../trading/contexts/TradingContext.jsx";
 import { useSignals } from "../../trading/hooks/useSignals.js";
 import { useWebSocket } from "../../../providers/WSProvider.jsx";
+import { getTradingPreferences } from "../../settings/services/settingsService.js";
 import { Card } from "../../../shared/components/ui/cards/Card.jsx";
 import { BalanceCard } from "../components/StatCards/BalanceCard.jsx";
 import { ProfitCard } from "../components/StatCards/ProfitCard.jsx";
@@ -35,6 +36,25 @@ export function UserDashboard() {
   const { signals } = useSignals();
   const { connected } = useWebSocket();
   const [refreshing, setRefreshing] = useState(false);
+  const [defaultSymbol, setDefaultSymbol] = useState("R_50");
+
+  useEffect(() => {
+    let mounted = true;
+    const loadDefaultSymbol = async () => {
+      try {
+        const prefs = await getTradingPreferences();
+        if (!mounted) return;
+        const configured = String(prefs?.defaultSymbol || "R_50").trim().toUpperCase();
+        if (configured) setDefaultSymbol(configured);
+      } catch {
+        // Keep fallback symbol.
+      }
+    };
+    loadDefaultSymbol();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const metrics = useMemo(() => {
     const allTrades = Array.isArray(trades) ? trades : [];
@@ -198,7 +218,7 @@ export function UserDashboard() {
         </div>
 
         <div className="space-y-6">
-          <MarketOverview signals={signals} />
+          <MarketOverview signals={signals} defaultSymbol={defaultSymbol} />
           <SystemHealth
             wsConnected={connected}
             tradeLoading={loading}
@@ -228,4 +248,7 @@ export function UserDashboard() {
     </div>
   );
 }
+
+
+
 

@@ -16,6 +16,7 @@ const DEFAULT_TRADING_PREFERENCES = {
   recoveryMultiplier: 1.6,
   timeframeSeconds: 60,
   signalsTimeframeSeconds: 0,
+  defaultSymbol: "R_50",
 };
 
 const DEFAULT_RISK_SETTINGS = {
@@ -83,3 +84,5 @@ export const saveRiskSettings = async (payload) => {
     ...(payload || {}),
   });
 };
+
+
