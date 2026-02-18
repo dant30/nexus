@@ -1,9 +1,17 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { BotStatus } from "../components/BotControls/BotStatus.jsx";
-import { StakeSettings } from "../components/BotControls/StakeSettings.jsx";
-import { RiskLimits } from "../components/BotControls/RiskLimits.jsx";
-import { TradeButton } from "../components/TradePanel/TradeButton.jsx";
-import { MarketSelector } from "../components/TradePanel/MarketSelector.jsx";
+import {
+  BotStatus,
+  StakeSettings,
+  RiskLimits,
+  StrategySelector,
+  TradeButton,
+  MarketSelector,
+  SignalDisplay,
+  RiskWarning,
+  PriceChart,
+  CandlestickChart,
+  TickChart,
+} from "../components/AutoTrading/index.js";
 import { useBotContext } from "../contexts/BotContext.jsx";
 import { Card } from "../../../shared/components/ui/cards/Card.jsx";
 import { Select } from "../../../shared/components/ui/inputs/Select.jsx";
@@ -46,6 +54,7 @@ export function AutoTrading() {
   const { sendMessage, connected, onMessage } = useWebSocket();
 
   const [market, setMarket] = useState("R_50");
+  const [strategy, setStrategy] = useState("scalping");
   const [stake, setStake] = useState(1);
   const [dailyLimit, setDailyLimit] = useState(50);
   const [dailyProfitTarget, setDailyProfitTarget] = useState(0);
@@ -72,7 +81,9 @@ export function AutoTrading() {
   const playedSettlementRef = useRef(new Set());
 
   const { signals } = useSignals();
-  useMarketData(market, timeframeSeconds);
+  const { data: marketData } = useMarketData(market, timeframeSeconds);
+  const ticks = marketData?.ticks || [];
+  const candles = marketData?.candles || [];
 
   useEffect(() => {
     let mounted = true;
@@ -168,9 +179,7 @@ export function AutoTrading() {
         audio.currentTime = 0;
         const maybePromise = audio.play();
         if (maybePromise?.catch) {
-          maybePromise.catch(() => {
-            // Ignore autoplay restrictions; next user interaction can unlock audio.
-          });
+          maybePromise.catch(() => {});
         }
       } catch {
         // No-op
@@ -204,12 +213,15 @@ export function AutoTrading() {
     1,
     Math.max(0, toNumber(minConfidence, TRADING.MIN_SIGNAL_CONFIDENCE))
   );
+  const normalizedStake = Math.max(0, toNumber(stake, 0));
+  const stakeInRange = normalizedStake >= TRADING.MIN_STAKE && normalizedStake <= TRADING.MAX_STAKE;
+
   const cooldownRemainingSeconds = Math.max(
     0,
     Math.ceil((toNumber(cooldownUntil, 0) - Date.now()) / 1000)
   );
 
-  const canRun = !!activeAccount?.id && toNumber(stake, 0) >= TRADING.MIN_STAKE;
+  const canRun = !!activeAccount?.id && stakeInRange;
 
   const toggleBot = async () => {
     if (running) {
@@ -235,8 +247,9 @@ export function AutoTrading() {
 
       sendMessage("bot_start", {
         symbol: market,
+        strategy,
         interval: timeframeSeconds,
-        stake: Number(stake),
+        stake: Number(normalizedStake),
         duration: Math.max(1, Math.floor(toNumber(durationValue, 1))),
         duration_unit: toDerivDurationUnit(durationUnit),
         duration_seconds: durationSeconds,
@@ -253,7 +266,7 @@ export function AutoTrading() {
       });
       setRunning(true);
       setLastEvent({
-        message: `Bot started on ${market} (${tradeType}, follow signal direction).`,
+        message: `Bot started on ${market} (${strategy}, ${tradeType}).`,
         timestamp: Date.now(),
       });
     } finally {
@@ -266,7 +279,10 @@ export function AutoTrading() {
       <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
         <Card className="space-y-4">
           <div className="text-sm font-semibold text-white/80">Auto Trading</div>
-          <MarketSelector value={market} onChange={setMarket} />
+          <div className="grid gap-3 md:grid-cols-2">
+            <MarketSelector value={market} onChange={setMarket} />
+            <StrategySelector value={strategy} onChange={setStrategy} />
+          </div>
           <div className="grid grid-cols-[2fr_1fr] gap-3">
             <div>
               <label className="mb-1 block text-xs font-semibold text-white/70">Duration</label>
@@ -301,6 +317,7 @@ export function AutoTrading() {
             </Select>
           </div>
           <StakeSettings value={stake} onChange={setStake} />
+          <RiskWarning stake={normalizedStake} isValid={stakeInRange} />
           <RiskLimits value={dailyLimit} onChange={setDailyLimit} />
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -336,18 +353,6 @@ export function AutoTrading() {
             </Select>
           </div>
           <div>
-            <label className="mb-1 block text-xs font-semibold text-white/70">
-              Cooldown (seconds)
-            </label>
-            <Input
-              type="number"
-              min="0"
-              step="1"
-              value={cooldownSeconds}
-              onChange={(event) => setCooldownSeconds(event.target.value)}
-            />
-          </div>
-          <div>
             <button
               type="button"
               onClick={() => setShowAdvanced((prev) => !prev)}
@@ -358,6 +363,18 @@ export function AutoTrading() {
           </div>
           {showAdvanced ? (
             <>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-white/70">
+                  Cooldown (seconds)
+                </label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={cooldownSeconds}
+                  onChange={(event) => setCooldownSeconds(event.target.value)}
+                />
+              </div>
               <div>
                 <label className="mb-1 block text-xs font-semibold text-white/70">
                   Max Trades / Session
@@ -411,17 +428,7 @@ export function AutoTrading() {
           </div>
 
           <div className="text-xs text-white/60">
-            <p>Selected signal: {activeSignal?.direction || "N/A"}</p>
-            <p>
-              Signal confidence:{" "}
-              {Math.round(
-                toNumber(activeSignal?.consensus?.confidence ?? activeSignal?.confidence, 0) * 100
-              )}
-              %
-            </p>
-            <p>
-              Session trades: {sessionTrades} / {normalizedMaxTradesPerSession}
-            </p>
+            <p>Session trades: {sessionTrades} / {normalizedMaxTradesPerSession}</p>
             <p>Cooldown remaining: {cooldownRemainingSeconds}s</p>
             <p>Direction mode: Follow signal direction</p>
             <p>Contract mode: {tradeType === "CALL_PUT" ? "Call/Put" : "Rise/Fall"}</p>
@@ -438,13 +445,26 @@ export function AutoTrading() {
             {running ? "Stop Bot" : "Start Bot"}
           </TradeButton>
         </Card>
-        <BotStatus
-          followSignalDirection={true}
-          recoveryLevel={recoveryLevel}
-          consecutiveLosses={consecutiveLosses}
-          baseStake={Number(stake)}
-        />
+
+        <div className="space-y-4">
+          <BotStatus
+            followSignalDirection={true}
+            recoveryLevel={recoveryLevel}
+            consecutiveLosses={consecutiveLosses}
+            baseStake={Number(normalizedStake)}
+          />
+          <SignalDisplay signal={activeSignal} />
+        </div>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-3">
+        <PriceChart symbol={market} ticks={ticks} />
+        <TickChart ticks={ticks} />
+        <CandlestickChart symbol={market} candles={candles} />
       </div>
     </div>
   );
 }
+
+
+

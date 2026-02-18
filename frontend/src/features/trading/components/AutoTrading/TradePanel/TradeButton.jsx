@@ -1,5 +1,5 @@
 import React from "react";
-import { TradeButton as BaseTradeButton } from "../../../../shared/components/ui/buttons/TradeButton.jsx";
+import { TradeButton as BaseTradeButton } from "../../../../../shared/components/ui/buttons/TradeButton.jsx";
 
 export function TradeButton({ loading, disabled, children = "Execute Trade", ...props }) {
   return (
@@ -12,3 +12,4 @@ export function TradeButton({ loading, disabled, children = "Execute Trade", ...
     </BaseTradeButton>
   );
 }
+

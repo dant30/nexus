@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { Card } from "../../../../shared/components/ui/cards/Card.jsx";
+import { Card } from "../../../../../shared/components/ui/cards/Card.jsx";
 
 export function CandlestickChart({ candles = [], symbol }) {
   const { min, max } = useMemo(() => {
@@ -50,3 +50,4 @@ export function CandlestickChart({ candles = [], symbol }) {
     </Card>
   );
 }
+

@@ -1,5 +1,5 @@
 import React from "react";
-import { Input } from "../../../../shared/components/ui/inputs/Input.jsx";
+import { Input } from "../../../../../shared/components/ui/inputs/Input.jsx";
 
 export function StakeSettings({ value, onChange }) {
   return (
@@ -14,3 +14,4 @@ export function StakeSettings({ value, onChange }) {
     </div>
   );
 }
+

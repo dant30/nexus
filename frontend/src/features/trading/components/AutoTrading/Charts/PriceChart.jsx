@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { Card } from "../../../../shared/components/ui/cards/Card.jsx";
+import { Card } from "../../../../../shared/components/ui/cards/Card.jsx";
 
 const buildPath = (points, width, height, padding) => {
   if (!points.length) return "";
@@ -47,3 +47,4 @@ export function PriceChart({ symbol, ticks = [] }) {
     </Card>
   );
 }
+

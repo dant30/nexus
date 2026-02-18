@@ -1,7 +1,7 @@
 import React from "react";
-import { Card } from "../../../../shared/components/ui/cards/Card.jsx";
-import { CardHeader } from "../../../../shared/components/ui/cards/CardHeader.jsx";
-import { CardBody } from "../../../../shared/components/ui/cards/CardBody.jsx";
+import { Card } from "../../../../../shared/components/ui/cards/Card.jsx";
+import { CardHeader } from "../../../../../shared/components/ui/cards/CardHeader.jsx";
+import { CardBody } from "../../../../../shared/components/ui/cards/CardBody.jsx";
 
 export function SignalDisplay({ signal }) {
   if (!signal) {
@@ -59,3 +59,4 @@ export function SignalDisplay({ signal }) {
     </Card>
   );
 }
+

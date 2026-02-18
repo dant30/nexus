@@ -1,5 +1,5 @@
 import React from "react";
-import { Select } from "../../../../shared/components/ui/inputs/Select.jsx";
+import { Select } from "../../../../../shared/components/ui/inputs/Select.jsx";
 
 export function StrategySelector({ value, onChange }) {
   return (
@@ -13,3 +13,4 @@ export function StrategySelector({ value, onChange }) {
     </div>
   );
 }
+

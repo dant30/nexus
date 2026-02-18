@@ -1,11 +1,11 @@
 import React from "react";
-import { TRADING } from "../../../../core/constants/trading.js";
+import { TRADING } from "../../../../../core/constants/trading.js";
 
 export function RiskWarning({ stake, isValid }) {
   if (!stake) {
     return (
       <p className="text-xs text-white/50">
-        Min stake {TRADING.MIN_STAKE} • Max stake {TRADING.MAX_STAKE}
+        Min stake {TRADING.MIN_STAKE} | Max stake {TRADING.MAX_STAKE}
       </p>
     );
   }
@@ -20,3 +20,5 @@ export function RiskWarning({ stake, isValid }) {
     </p>
   );
 }
+
+

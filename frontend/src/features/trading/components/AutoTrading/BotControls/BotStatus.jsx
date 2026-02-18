@@ -1,6 +1,6 @@
 import React from "react";
-import { Card } from "../../../../shared/components/ui/cards/Card.jsx";
-import { useBotContext } from "../../contexts/BotContext.jsx";
+import { Card } from "../../../../../shared/components/ui/cards/Card.jsx";
+import { useBotContext } from "../../../contexts/BotContext.jsx";
 
 const RECOVERY_MULTIPLIERS = [1.0, 1.5, 2.25, 3.375, 5.0, 7.5, 10.0];
 
@@ -45,3 +45,4 @@ export function BotStatus({
     </Card>
   );
 }
+

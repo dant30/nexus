@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { Card } from "../../../../shared/components/ui/cards/Card.jsx";
+import { Card } from "../../../../../shared/components/ui/cards/Card.jsx";
 
 export function TickChart({ ticks = [] }) {
   const { path } = useMemo(() => {
@@ -28,3 +28,4 @@ export function TickChart({ ticks = [] }) {
     </Card>
   );
 }
+

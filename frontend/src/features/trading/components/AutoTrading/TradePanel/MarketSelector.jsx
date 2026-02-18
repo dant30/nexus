@@ -1,5 +1,5 @@
 import React from "react";
-import { Select } from "../../../../shared/components/ui/inputs/Select.jsx";
+import { Select } from "../../../../../shared/components/ui/inputs/Select.jsx";
 
 const DEFAULT_MARKETS = [
   { value: "R_10", label: "Volatility 10 Index" },
@@ -23,3 +23,4 @@ export function MarketSelector({ value, onChange, options = DEFAULT_MARKETS }) {
     </div>
   );
 }
+
