@@ -7,12 +7,11 @@ import { Select } from "../../../shared/components/ui/inputs/Select.jsx";
 import { Card } from "../../../shared/components/ui/cards/Card.jsx";
 import { useTradingContext } from "../contexts/TradingContext.jsx";
 import { getTradingPreferences } from "../../settings/services/settingsService.js";
-import { buildRankedSignals } from "../utils/signalRanking.js";
+import { buildDefaultSymbolStrategyRows } from "../utils/signalRanking.js";
 
 export function SignalsMonitor() {
   const { signalsTimeframeSeconds, setSignalsTimeframeSeconds } = useTradingContext();
   const [defaultSymbol, setDefaultSymbol] = useState("R_50");
-  const [scope, setScope] = useState("all");
 
   useEffect(() => {
     let mounted = true;
@@ -46,27 +45,21 @@ export function SignalsMonitor() {
 
   const ranked = useMemo(
     () =>
-      buildRankedSignals(timeframeFiltered, {
+      buildDefaultSymbolStrategyRows(timeframeFiltered, {
         defaultSymbol,
-        mode: scope,
+        recentSignals: 4,
         limit: 6,
       }),
-    [timeframeFiltered, defaultSymbol, scope]
+    [timeframeFiltered, defaultSymbol]
   );
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="text-sm font-semibold text-white/80">Signal Monitor</div>
+        <div className="text-sm font-semibold text-white/80">
+          Signal Monitor ({defaultSymbol} strategies)
+        </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Select
-            value={scope}
-            onChange={(event) => setScope(event.target.value)}
-            className="max-w-[170px]"
-          >
-            <option value="all">All symbols</option>
-            <option value="default">Default ({defaultSymbol})</option>
-          </Select>
           <Select
             value={signalsTimeframeSeconds}
             onChange={(event) => setSignalsTimeframeSeconds(Number(event.target.value))}
@@ -87,8 +80,10 @@ export function SignalsMonitor() {
 
       <Card>
         <div className="mb-2 flex items-center justify-between">
-          <p className="text-sm font-semibold text-white/85">Confidence Ranking</p>
-          <p className="text-xs text-white/50">Top {ranked.length} most recent symbol signals</p>
+          <p className="text-sm font-semibold text-white/85">Strategy Confidence</p>
+          <p className="text-xs text-white/50">
+            Top {ranked.length} strategies from recent {defaultSymbol} snapshots
+          </p>
         </div>
 
         {loading ? (
@@ -109,12 +104,7 @@ export function SignalsMonitor() {
                   <div className="mb-1 flex items-center justify-between gap-2 text-xs">
                     <div className="flex items-center gap-2">
                       <span className="text-white/40">#{signal.rank}</span>
-                      <span className="font-semibold text-white">{signal.symbol}</span>
-                      {signal.isDefault ? (
-                        <span className="rounded-full border border-sky-400/35 bg-sky-400/10 px-2 py-1 text-[10px] font-semibold text-sky-300">
-                          Default
-                        </span>
-                      ) : null}
+                      <span className="font-semibold text-white">{signal.strategy}</span>
                     </div>
                     <span
                       className={[

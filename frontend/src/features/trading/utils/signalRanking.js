@@ -27,54 +27,67 @@ export const resolveSignalDirection = (signal = {}) => {
 export const resolveSignalConfidence = (signal = {}) =>
   toNumber(signal?.consensus?.confidence ?? signal?.confidence, 0);
 
-const pickPreferredSignal = (current, candidate) => {
-  if (!current) return candidate;
-  if (candidate.confidence > current.confidence) return candidate;
-  if (candidate.confidence === current.confidence && candidate.__index < current.__index) return candidate;
-  return current;
-};
+const normalizeStrategyName = (value = "") =>
+  String(value || "Unknown")
+    .replace(/Strategy$/i, "")
+    .trim() || "Unknown";
 
-export const buildRankedSignals = (
+const resolveStrategyDirection = (entry = {}) =>
+  resolveSignalDirection({
+    direction: entry?.direction,
+    decision: entry?.signal,
+    consensus: { direction: entry?.direction, decision: entry?.signal },
+  });
+
+export const buildDefaultSymbolStrategyRows = (
   signals = [],
   {
     defaultSymbol = "R_50",
-    mode = "all",
+    recentSignals = 4,
     limit = 6,
   } = {}
 ) => {
-  const normalized = (Array.isArray(signals) ? signals : []).map((signal, index) => {
-    const symbol = resolveSignalSymbol(signal);
-    const direction = resolveSignalDirection(signal);
-    const confidence = resolveSignalConfidence(signal);
-    return {
-      ...signal,
-      symbol,
-      direction,
-      confidence,
-      __index: index,
-      isDefault: symbol === defaultSymbol,
-    };
+  const base = (Array.isArray(signals) ? signals : [])
+    .filter((signal) => resolveSignalSymbol(signal) === defaultSymbol)
+    .slice(0, Math.max(1, recentSignals));
+
+  const strategyMap = new Map();
+  base.forEach((signal) => {
+    const entries = Array.isArray(signal?.strategies) ? signal.strategies : [];
+    entries.forEach((entry) => {
+      const strategy = normalizeStrategyName(entry?.strategy);
+      const confidence = toNumber(entry?.confidence, 0);
+      const direction = resolveStrategyDirection(entry);
+      const row = strategyMap.get(strategy) || {
+        strategy,
+        symbol: defaultSymbol,
+        confidence: 0,
+        latestConfidence: 0,
+        samples: 0,
+        direction,
+      };
+      row.confidence += confidence;
+      row.samples += 1;
+      row.latestConfidence = confidence;
+      row.direction = direction;
+      strategyMap.set(strategy, row);
+    });
   });
 
-  const bySymbol = normalized.reduce((acc, signal) => {
-    acc.set(signal.symbol, pickPreferredSignal(acc.get(signal.symbol), signal));
-    return acc;
-  }, new Map());
-
-  let rows = Array.from(bySymbol.values());
-  if (mode === "default") {
-    rows = rows.filter((row) => row.symbol === defaultSymbol);
-  }
+  const rows = Array.from(strategyMap.values()).map((row) => ({
+    ...row,
+    confidence: row.samples > 0 ? row.confidence / row.samples : 0,
+  }));
 
   rows.sort((a, b) => {
     if (b.confidence !== a.confidence) return b.confidence - a.confidence;
-    return a.__index - b.__index;
+    return b.latestConfidence - a.latestConfidence;
   });
 
   const topConfidence = rows[0]?.confidence || 0;
-  return rows.slice(0, Math.max(1, limit)).map((row, idx) => ({
+  return rows.slice(0, Math.max(1, limit)).map((row, index) => ({
     ...row,
-    rank: idx + 1,
+    rank: index + 1,
     confidencePct: row.confidence * 100,
     confidenceGapPct: Math.max(0, (topConfidence - row.confidence) * 100),
   }));

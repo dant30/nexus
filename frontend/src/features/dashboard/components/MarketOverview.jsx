@@ -2,7 +2,7 @@ import React from "react";
 import { ArrowUpRight, ArrowDownRight, Activity } from "lucide-react";
 import { Card } from "../../../shared/components/ui/cards/Card.jsx";
 import { Empty } from "../../../shared/components/ui/misc/Empty.jsx";
-import { buildRankedSignals } from "../../trading/utils/signalRanking.js";
+import { buildDefaultSymbolStrategyRows } from "../../trading/utils/signalRanking.js";
 
 const confidenceTier = (value) => {
   if (value >= 0.8) return { label: "Strong", className: "text-emerald-300" };
@@ -11,9 +11,9 @@ const confidenceTier = (value) => {
 };
 
 export function MarketOverview({ signals = [], defaultSymbol = "R_50" }) {
-  const rows = buildRankedSignals(signals, {
+  const rows = buildDefaultSymbolStrategyRows(signals, {
     defaultSymbol,
-    mode: "all",
+    recentSignals: 4,
     limit: 5,
   });
 
@@ -25,7 +25,9 @@ export function MarketOverview({ signals = [], defaultSymbol = "R_50" }) {
         <div className="mb-4 flex items-center justify-between">
           <div>
             <p className="text-sm font-semibold text-white/80">Market Overview</p>
-            <p className="mt-1 text-xs text-white/50">Top symbol comparison by signal confidence</p>
+            <p className="mt-1 text-xs text-white/50">
+              {defaultSymbol} strategy comparison by confidence
+            </p>
           </div>
           <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-white/60">
             <Activity size={12} />
@@ -52,12 +54,10 @@ export function MarketOverview({ signals = [], defaultSymbol = "R_50" }) {
                 >
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
-                      <p className="font-semibold text-white/90">{row.symbol}</p>
-                      {row.symbol === defaultSymbol ? (
-                        <span className="rounded-full border border-sky-400/35 bg-sky-400/10 px-2 py-1 text-[10px] font-semibold text-sky-300">
-                          Default
-                        </span>
-                      ) : null}
+                      <p className="font-semibold text-white/90">{row.strategy}</p>
+                      <span className="rounded-full border border-sky-400/35 bg-sky-400/10 px-2 py-1 text-[10px] font-semibold text-sky-300">
+                        {defaultSymbol}
+                      </span>
                     </div>
                     <span
                       className={[

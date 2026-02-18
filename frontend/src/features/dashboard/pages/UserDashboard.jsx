@@ -32,8 +32,12 @@ const parseTradeTime = (trade) => {
 export function UserDashboard() {
   const { user } = useAuth();
   const { activeAccount, balanceLoading } = useAccountContext();
-  const { trades, openTrades, loading, refresh } = useTradingContext();
-  const { signals } = useSignals();
+  const { trades, openTrades, loading, refresh, signalsTimeframeSeconds } = useTradingContext();
+  const activeSignalsInterval = signalsTimeframeSeconds > 0 ? signalsTimeframeSeconds : 60;
+  const { signals } = useSignals({
+    liveMonitor: true,
+    intervalSeconds: activeSignalsInterval,
+  });
   const { connected } = useWebSocket();
   const [refreshing, setRefreshing] = useState(false);
   const [defaultSymbol, setDefaultSymbol] = useState("R_50");
