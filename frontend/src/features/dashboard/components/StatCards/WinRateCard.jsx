@@ -14,14 +14,14 @@ export function WinRateCard({ winRate = 0, wins = 0, losses = 0, total = 0 }) {
   const quality = qualityLabel(clamped);
 
   return (
-    <Card className="group relative overflow-hidden">
+    <Card className="group relative min-h-[184px] overflow-hidden">
       <div className="absolute inset-0 bg-gradient-to-br from-sky-500/5 to-transparent opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
 
       <div className="relative flex items-start justify-between">
         <div className="min-w-0 flex-1">
-          <p className="mb-4 text-xs font-medium uppercase tracking-wider text-white/50">Win Rate</p>
+          <p className="mb-3 text-xs font-semibold uppercase tracking-[0.12em] text-white/50">Win Rate</p>
           <p className="text-2xl font-bold text-white sm:text-3xl">{clamped.toFixed(1)}%</p>
-          <p className="mt-1 text-sm text-white/60">
+          <p className="mt-1 text-xs text-white/60">
             <span className="font-semibold text-emerald-300">{wins}W</span>
             <span className="mx-1 text-white/40">/</span>
             <span className="font-semibold text-rose-300">{losses}L</span>
@@ -33,10 +33,10 @@ export function WinRateCard({ winRate = 0, wins = 0, losses = 0, total = 0 }) {
         </div>
       </div>
 
-      <div className="mt-4 space-y-3 border-t border-white/5 bg-white/[0.02] pt-4">
+      <div className="mt-3 space-y-3 border-t border-white/5 bg-white/[0.02] pt-3">
         <div className="space-y-2">
           <div className="flex items-center justify-between text-xs">
-            <span className="text-white/40">Execution Quality</span>
+            <span className="text-white/45">Execution Quality</span>
             <span className={`font-semibold ${quality.color}`}>{quality.label}</span>
           </div>
           <div className="h-2 w-full overflow-hidden rounded-full bg-white/10">

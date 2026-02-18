@@ -14,7 +14,7 @@ export function ProfitCard({ totalProfit = 0, todayProfit = 0, roi = 0, currency
   const roiPositive = roi >= 0;
 
   return (
-    <Card className="group relative overflow-hidden">
+    <Card className="group relative min-h-[184px] overflow-hidden">
       <div
         className={`absolute inset-0 opacity-0 transition-opacity duration-500 group-hover:opacity-100 ${
           positive ? "bg-gradient-to-br from-emerald-500/5 to-transparent" : "bg-gradient-to-br from-rose-500/5 to-transparent"
@@ -23,15 +23,19 @@ export function ProfitCard({ totalProfit = 0, todayProfit = 0, roi = 0, currency
 
       <div className="relative flex items-start justify-between">
         <div className="min-w-0 flex-1">
-          <p className="mb-4 text-xs font-medium uppercase tracking-wider text-white/50">Net P/L</p>
+          <p className="mb-3 text-xs font-semibold uppercase tracking-[0.12em] text-white/50">Net P/L</p>
 
           <p className={`text-2xl font-bold sm:text-3xl ${positive ? "text-emerald-300" : "text-rose-300"}`}>
             {positive ? "+" : ""}
             {formatMoney(totalProfit, currency)}
           </p>
 
-          <p className="mt-1 text-sm text-white/60">
-            ROI: <span className={`font-semibold ${roiPositive ? "text-emerald-300" : "text-rose-300"}`}>{roiPositive ? "+" : ""}{roi.toFixed(2)}%</span>
+          <p className="mt-1 text-xs text-white/60">
+            ROI:{" "}
+            <span className={`font-semibold ${roiPositive ? "text-emerald-300" : "text-rose-300"}`}>
+              {roiPositive ? "+" : ""}
+              {roi.toFixed(2)}%
+            </span>
           </p>
         </div>
 
@@ -44,10 +48,10 @@ export function ProfitCard({ totalProfit = 0, todayProfit = 0, roi = 0, currency
         </div>
       </div>
 
-      <div className="mt-4 border-t border-white/5 bg-white/[0.02] pt-3">
+      <div className="mt-3 border-t border-white/5 bg-white/[0.02] pt-3">
         <div className="flex items-center justify-between">
-          <span className="text-xs text-white/40">Today</span>
-          <span className={`text-sm font-semibold ${todayPositive ? "text-emerald-300" : "text-rose-300"}`}>
+          <span className="text-xs text-white/45">Today</span>
+          <span className={`text-xs font-semibold ${todayPositive ? "text-emerald-300" : "text-rose-300"}`}>
             {todayPositive ? "+" : ""}
             {formatMoney(todayProfit, currency)}
           </span>

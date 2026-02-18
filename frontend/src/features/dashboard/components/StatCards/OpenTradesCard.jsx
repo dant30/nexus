@@ -20,14 +20,14 @@ export function OpenTradesCard({ openTrades = 0, openExposure = 0, currency = "U
       : { label: "Controlled", badge: "border-emerald-400/30 bg-emerald-400/10 text-emerald-300" };
 
   return (
-    <Card className="group relative overflow-hidden">
+    <Card className="group relative min-h-[184px] overflow-hidden">
       <div className="absolute inset-0 bg-gradient-to-br from-violet-500/5 to-transparent opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
 
       <div className="relative flex items-start justify-between">
         <div className="min-w-0 flex-1">
-          <p className="mb-4 text-xs font-medium uppercase tracking-wider text-white/50">Open Positions</p>
+          <p className="mb-3 text-xs font-semibold uppercase tracking-[0.12em] text-white/50">Open Positions</p>
           <p className="text-2xl font-bold text-white sm:text-3xl">{openTrades}</p>
-          <p className="mt-1 text-sm text-white/60">
+          <p className="mt-1 text-xs text-white/60">
             Exposure: <span className="font-semibold text-white/80">{formatMoney(openExposure, currency)}</span>
           </p>
         </div>
@@ -37,10 +37,12 @@ export function OpenTradesCard({ openTrades = 0, openExposure = 0, currency = "U
         </div>
       </div>
 
-      <div className="mt-4 border-t border-white/5 bg-white/[0.02] pt-3">
+      <div className="mt-3 border-t border-white/5 bg-white/[0.02] pt-3">
         <div className="flex items-center justify-between">
-          <span className="text-xs text-white/40">Profile</span>
-          <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-2 text-xs font-semibold ${exposureTier.badge}`}>
+          <span className="text-xs text-white/45">Profile</span>
+          <span
+            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${exposureTier.badge}`}
+          >
             <div className="h-1.5 w-1.5 rounded-full bg-current" />
             {exposureTier.label}
           </span>

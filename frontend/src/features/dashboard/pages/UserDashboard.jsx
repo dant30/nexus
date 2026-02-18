@@ -185,30 +185,38 @@ export function UserDashboard() {
         </div>
       </Card>
 
-      <div className="grid auto-rows-max gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <BalanceCard
-          balance={accountBalance}
-          currency={accountCurrency}
-          loading={balanceLoading}
-          accountType={activeAccount?.account_type}
-        />
-        <ProfitCard
-          totalProfit={metrics.totalProfit}
-          todayProfit={metrics.todayProfit}
-          roi={roi}
-          currency={accountCurrency}
-        />
-        <WinRateCard
-          winRate={metrics.winRate}
-          wins={metrics.wins}
-          losses={metrics.losses}
-          total={metrics.totalTrades}
-        />
-        <OpenTradesCard
-          openTrades={metrics.openTrades}
-          openExposure={metrics.openExposure}
-          currency={accountCurrency}
-        />
+      <div className="grid auto-rows-max items-stretch gap-4 sm:auto-rows-fr sm:grid-cols-2 xl:grid-cols-4">
+        <div className="h-full">
+          <BalanceCard
+            balance={accountBalance}
+            currency={accountCurrency}
+            loading={balanceLoading}
+            accountType={activeAccount?.account_type}
+          />
+        </div>
+        <div className="h-full">
+          <ProfitCard
+            totalProfit={metrics.totalProfit}
+            todayProfit={metrics.todayProfit}
+            roi={roi}
+            currency={accountCurrency}
+          />
+        </div>
+        <div className="h-full">
+          <WinRateCard
+            winRate={metrics.winRate}
+            wins={metrics.wins}
+            losses={metrics.losses}
+            total={metrics.totalTrades}
+          />
+        </div>
+        <div className="h-full">
+          <OpenTradesCard
+            openTrades={metrics.openTrades}
+            openExposure={metrics.openExposure}
+            currency={accountCurrency}
+          />
+        </div>
       </div>
 
       <div className="grid gap-6 xl:grid-cols-3">
