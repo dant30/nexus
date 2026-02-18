@@ -120,6 +120,8 @@ export function UserDashboard() {
   const accountBalance = toNumber(activeAccount?.balance, 0);
   const displayName =
     user?.deriv_full_name?.trim() || user?.first_name || user?.username || "Trader";
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening";
   const roi = metrics.totalStake > 0 ? (metrics.totalProfit / metrics.totalStake) * 100 : 0;
   const accountReady = !!activeAccount?.id;
 
@@ -128,7 +130,7 @@ export function UserDashboard() {
       <Card className="border border-white/10 bg-gradient-to-r from-slate-900/70 via-slate-900/45 to-slate-900/70">
         <div className="flex items-start justify-between gap-3 sm:items-center">
           <div className="min-w-0 flex-1">
-            <h2 className="truncate text-lg font-bold sm:text-2xl">Welcome back, {displayName}</h2>
+            <h2 className="truncate text-lg font-bold sm:text-2xl">Good {greeting}, {displayName}</h2>
             <p className="mt-1 hidden text-sm text-white/60 sm:block">
               Your live account pulse, execution quality, and market position.
             </p>
@@ -226,3 +228,4 @@ export function UserDashboard() {
     </div>
   );
 }
+
