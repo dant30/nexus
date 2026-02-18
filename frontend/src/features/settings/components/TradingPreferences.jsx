@@ -21,6 +21,14 @@ const RECOMMENDED_TRADING_PREFERENCES = {
   defaultSymbol: "R_50",
 };
 
+const SYMBOL_OPTIONS = [
+  { value: "R_10", label: "Volatility 10 (R_10)" },
+  { value: "R_25", label: "Volatility 25 (R_25)" },
+  { value: "R_50", label: "Volatility 50 (R_50)" },
+  { value: "R_75", label: "Volatility 75 (R_75)" },
+  { value: "R_100", label: "Volatility 100 (R_100)" },
+];
+
 export function TradingPreferences() {
   const toast = useToast();
   const [loading, setLoading] = React.useState(false);
@@ -214,6 +222,25 @@ export function TradingPreferences() {
             }
             disabled={loading}
           />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-semibold text-white/70">Default Symbol</label>
+          <Select
+            value={form.defaultSymbol}
+            onChange={(event) =>
+              setForm((prev) => ({
+                ...prev,
+                defaultSymbol: String(event.target.value).toUpperCase(),
+              }))
+            }
+            disabled={loading}
+          >
+            {SYMBOL_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </Select>
         </div>
         <div>
           <label className="mb-1 block text-xs font-semibold text-white/70">Default Timeframe</label>
