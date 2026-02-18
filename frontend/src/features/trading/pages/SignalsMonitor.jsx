@@ -115,6 +115,9 @@ export function SignalsMonitor() {
                       {signal.direction}
                     </span>
                   </div>
+                  <p className="mb-1 text-[11px] text-white/60">
+                    {signal.latestReason || "No strategy rationale provided."}
+                  </p>
 
                   <div className="h-1.5 w-full rounded-full bg-white/10">
                     <div

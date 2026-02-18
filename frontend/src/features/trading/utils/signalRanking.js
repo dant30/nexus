@@ -63,6 +63,7 @@ export const buildDefaultSymbolStrategyRows = (
         symbol: defaultSymbol,
         confidence: 0,
         latestConfidence: 0,
+        latestReason: "",
         samples: 0,
         direction,
       };
@@ -70,6 +71,9 @@ export const buildDefaultSymbolStrategyRows = (
       row.samples += 1;
       row.latestConfidence = confidence;
       row.direction = direction;
+      if (!row.latestReason) {
+        row.latestReason = String(entry?.reason || "").trim();
+      }
       strategyMap.set(strategy, row);
     });
   });

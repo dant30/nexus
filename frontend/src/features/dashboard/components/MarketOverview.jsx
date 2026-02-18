@@ -74,6 +74,9 @@ export function MarketOverview({ signals = [], defaultSymbol = "R_50" }) {
                       {row.direction}
                     </span>
                   </div>
+                  <p className="mt-1 text-[11px] text-white/60">
+                    {row.latestReason || "No strategy rationale provided."}
+                  </p>
 
                   <div className="mt-1 h-1.5 w-full rounded-full bg-white/10">
                     <div
