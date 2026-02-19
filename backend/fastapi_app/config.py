@@ -91,6 +91,12 @@ class Settings:
     # Logging
     LOG_LEVEL: str = env.get("LOG_LEVEL", "INFO")
     LOG_FILE: str = "logs/fastapi.log"
+
+    # Admin Bootstrap (optional)
+    ADMIN_EMAIL: str = env.get("ADMIN_EMAIL", "")
+    ADMIN_PASSWORD: str = env.get("ADMIN_PASSWORD", "")
+    ADMIN_USERNAME: str = env.get("ADMIN_USERNAME", "admin")
+    ADMIN_RESET_PASSWORD_ON_START: bool = env.get_bool("ADMIN_RESET_PASSWORD_ON_START", False)
     
     # Celery (for async tasks)
     CELERY_BROKER_URL: str = env.get("CELERY_BROKER_URL", "redis://localhost:6379/1")

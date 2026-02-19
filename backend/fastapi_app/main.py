@@ -44,6 +44,7 @@ from fastapi_app.trading_engine.strategies import (
 from django.contrib.auth import get_user_model
 from django_core.accounts.models import Account
 from django_core.trades.models import Trade
+from django_core.audit.models import AuditLog
 
 logger = get_logger("fastapi")
 User = get_user_model()
@@ -53,6 +54,19 @@ BOT_LOOP_INTERVAL_SECONDS = 3
 
 # Strategy cache for performance
 _strategy_cache: Dict[str, List] = {}
+
+GLOBAL_ADMIN_DEFAULTS = {
+    "trading": {
+        "recoveryMode": "FIBONACCI",
+        "recoveryMultiplier": 1.6,
+        "minSignalConfidence": 0.7,
+    },
+    "risk": {
+        "dailyLossLimit": 50.0,
+        "maxConsecutiveLosses": 5,
+        "maxStakePercent": 5.0,
+    },
+}
 
 
 class AppState:
@@ -92,6 +106,10 @@ class AppState:
         # Request tracking for rate limiting (simplified)
         self.request_counts: Dict[str, List[float]] = defaultdict(list)
 
+        # Cached admin global settings
+        self.admin_settings_cache: Dict[str, Any] = {}
+        self.admin_settings_cached_at: float = 0.0
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -114,6 +132,11 @@ async def lifespan(app: FastAPI):
         log_info("✅ Risk manager initialized")
     except Exception as e:
         log_error("❌ Risk manager init failed", exception=e)
+
+    try:
+        await _ensure_admin_user_from_env()
+    except Exception as e:
+        log_error("Admin bootstrap failed", exception=e)
 
     # Start per-user Deriv connection pool (trade execution clients).
     try:
@@ -224,6 +247,129 @@ async def lifespan(app: FastAPI):
 # Helper Functions
 # ============================================================================
 
+async def _ensure_admin_user_from_env():
+    """Create or promote admin user from environment variables (optional)."""
+    admin_email = (settings.ADMIN_EMAIL or "").strip().lower()
+    admin_password = settings.ADMIN_PASSWORD or ""
+    admin_username = (settings.ADMIN_USERNAME or "admin").strip() or "admin"
+
+    if not admin_email or not admin_password:
+        return
+
+    try:
+        user = await sync_to_async(User.objects.filter(email=admin_email).first)()
+        if user:
+            changed = False
+            if not user.is_staff:
+                user.is_staff = True
+                changed = True
+            if not user.is_superuser:
+                user.is_superuser = True
+                changed = True
+            if settings.ADMIN_RESET_PASSWORD_ON_START:
+                user.set_password(admin_password)
+                changed = True
+            if changed:
+                await sync_to_async(user.save)()
+            log_info("Admin user ensured from env", user_id=user.id, email=admin_email, created=False)
+            return
+
+        username_candidate = admin_username
+        suffix = 1
+        while await sync_to_async(User.objects.filter(username=username_candidate).exists)():
+            suffix += 1
+            username_candidate = f"{admin_username}{suffix}"
+
+        user = await sync_to_async(User.objects.create_superuser)(
+            username=username_candidate,
+            email=admin_email,
+            password=admin_password,
+        )
+        if not user.is_staff or not user.is_superuser:
+            user.is_staff = True
+            user.is_superuser = True
+            await sync_to_async(user.save)()
+        log_info("Admin user ensured from env", user_id=user.id, email=admin_email, created=True)
+    except Exception as exc:
+        log_error("Failed ensuring admin user from env", exception=exc)
+
+
+def _merge_admin_settings(raw: Dict[str, Any]) -> Dict[str, Any]:
+    trading = raw.get("trading") if isinstance(raw.get("trading"), dict) else {}
+    risk = raw.get("risk") if isinstance(raw.get("risk"), dict) else {}
+    return {
+        "trading": {
+            "recoveryMode": str(
+                trading.get("recoveryMode") or GLOBAL_ADMIN_DEFAULTS["trading"]["recoveryMode"]
+            ).upper(),
+            "recoveryMultiplier": float(
+                trading.get("recoveryMultiplier")
+                if trading.get("recoveryMultiplier") is not None
+                else GLOBAL_ADMIN_DEFAULTS["trading"]["recoveryMultiplier"]
+            ),
+            "minSignalConfidence": float(
+                trading.get("minSignalConfidence")
+                if trading.get("minSignalConfidence") is not None
+                else GLOBAL_ADMIN_DEFAULTS["trading"]["minSignalConfidence"]
+            ),
+        },
+        "risk": {
+            "dailyLossLimit": float(
+                risk.get("dailyLossLimit")
+                if risk.get("dailyLossLimit") is not None
+                else GLOBAL_ADMIN_DEFAULTS["risk"]["dailyLossLimit"]
+            ),
+            "maxConsecutiveLosses": int(
+                risk.get("maxConsecutiveLosses")
+                if risk.get("maxConsecutiveLosses") is not None
+                else GLOBAL_ADMIN_DEFAULTS["risk"]["maxConsecutiveLosses"]
+            ),
+            "maxStakePercent": float(
+                risk.get("maxStakePercent")
+                if risk.get("maxStakePercent") is not None
+                else GLOBAL_ADMIN_DEFAULTS["risk"]["maxStakePercent"]
+            ),
+        },
+    }
+
+
+async def _get_global_admin_system_settings(app: FastAPI, force_refresh: bool = False) -> Dict[str, Any]:
+    """Load admin system settings with short in-memory cache."""
+    now = time.time()
+    ttl_seconds = 15
+    if (
+        not force_refresh
+        and app.state.admin_settings_cache
+        and (now - float(app.state.admin_settings_cached_at or 0)) < ttl_seconds
+    ):
+        return app.state.admin_settings_cache
+
+    latest = await sync_to_async(
+        AuditLog.objects.filter(action=AuditLog.ACTION_SYSTEM_SETTINGS_UPDATED)
+        .order_by("-created_at")
+        .first
+    )()
+    metadata = latest.metadata if latest and isinstance(latest.metadata, dict) else {}
+    merged = _merge_admin_settings(metadata)
+    app.state.admin_settings_cache = merged
+    app.state.admin_settings_cached_at = now
+    return merged
+
+
+def _pick_with_precedence(
+    explicit_value,
+    account_value,
+    admin_value,
+    fallback_value,
+):
+    if explicit_value is not None:
+        return explicit_value
+    if account_value is not None:
+        return account_value
+    if admin_value is not None:
+        return admin_value
+    return fallback_value
+
 async def _persist_all_bot_states(app: FastAPI):
     """Save all bot states to database before shutdown."""
     for connection_id, bot_state in app.state.bot_instances.items():
@@ -269,7 +415,7 @@ async def _save_bot_state_to_db(user_id: int, account_id: int, bot_state: Dict):
         log_error("Failed to save bot state to DB", exception=e)
 
 
-async def _load_bot_state_from_db(user_id: int, account_id: int) -> Optional[Dict]:
+async def _load_bot_state_from_db(app: FastAPI, user_id: int, account_id: int) -> Optional[Dict]:
     """Load bot settings from Account model."""
     try:
         account = await sync_to_async(Account.objects.get)(id=account_id, user_id=user_id)
@@ -279,6 +425,9 @@ async def _load_bot_state_from_db(user_id: int, account_id: int) -> Optional[Dic
         
         metadata = account.metadata if isinstance(account.metadata, dict) else {}
         bot_risk = metadata.get("bot_risk") if isinstance(metadata.get("bot_risk"), dict) else {}
+        admin_settings = await _get_global_admin_system_settings(app)
+        admin_trading = admin_settings.get("trading", {})
+        admin_risk = admin_settings.get("risk", {})
 
         return {
             "enabled": account.bot_enabled,
@@ -289,15 +438,43 @@ async def _load_bot_state_from_db(user_id: int, account_id: int) -> Optional[Dic
             "duration_unit": account.bot_duration_unit or "m",
             "trade_type": account.bot_trade_type or "RISE_FALL",
             "contract": account.bot_contract or "RISE",
-            "min_confidence": account.bot_min_confidence or 0.7,
-            "cooldown_seconds": account.bot_cooldown_seconds or 30,
-            "max_trades_per_session": account.bot_max_trades_per_session or 0,
+            "min_confidence": float(
+                _pick_with_precedence(
+                    None,
+                    account.bot_min_confidence,
+                    admin_trading.get("minSignalConfidence"),
+                    0.7,
+                )
+            ),
+            "cooldown_seconds": int(_pick_with_precedence(None, account.bot_cooldown_seconds, 30, 30)),
+            "max_trades_per_session": int(_pick_with_precedence(None, account.bot_max_trades_per_session, 0, 0)),
             "follow_signal_direction": account.bot_follow_signal if hasattr(account, 'bot_follow_signal') else True,
-            "daily_loss_limit": float(account.bot_daily_loss_limit) if getattr(account, "bot_daily_loss_limit", None) else 0,
-            "daily_profit_target": float(bot_risk.get("daily_profit_target") or 0),
-            "session_take_profit": float(bot_risk.get("session_take_profit") or 0),
-            "recovery_mode": str(bot_risk.get("recovery_mode") or "FIBONACCI").upper(),
-            "recovery_multiplier": float(bot_risk.get("recovery_multiplier") or 1.6),
+            "daily_loss_limit": float(
+                _pick_with_precedence(
+                    None,
+                    float(account.bot_daily_loss_limit) if getattr(account, "bot_daily_loss_limit", None) is not None else None,
+                    admin_risk.get("dailyLossLimit"),
+                    0,
+                )
+            ),
+            "daily_profit_target": float(_pick_with_precedence(None, bot_risk.get("daily_profit_target"), 0, 0)),
+            "session_take_profit": float(_pick_with_precedence(None, bot_risk.get("session_take_profit"), 0, 0)),
+            "recovery_mode": str(
+                _pick_with_precedence(
+                    None,
+                    bot_risk.get("recovery_mode"),
+                    admin_trading.get("recoveryMode"),
+                    "FIBONACCI",
+                )
+            ).upper(),
+            "recovery_multiplier": float(
+                _pick_with_precedence(
+                    None,
+                    bot_risk.get("recovery_multiplier"),
+                    admin_trading.get("recoveryMultiplier"),
+                    1.6,
+                )
+            ),
             "session_trades": 0,
             "session_realized_profit": 0,
             "cooldown_until": 0,
@@ -1152,7 +1329,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, account_id: int
         
         # Load from database if no in-memory state
         elif connection_id not in app.state.bot_instances:
-            bot_state = await _load_bot_state_from_db(user_id, account_id)
+            bot_state = await _load_bot_state_from_db(app, user_id, account_id)
             if bot_state:
                 app.state.bot_instances[connection_id] = bot_state
                 log_info("Bot state loaded from database", connection_id=connection_id)
@@ -1274,16 +1451,55 @@ async def handle_ws_message(websocket: WebSocket, user_id: int, account_id: int,
         # Stop any existing bot first
         await _stop_bot(connection_id, reason="restart", notify=False)
         
-        # Extract bot parameters
-        symbol = data.get("symbol")
-        interval = int(data.get("interval") or 60)
-        follow_signal_direction = bool(data.get("follow_signal_direction", True))
-        trade_type = (data.get("trade_type") or "RISE_FALL").upper()
-        contract = (data.get("contract") or "RISE").upper()
+        # Resolve account-specific and admin-global defaults.
+        account = await sync_to_async(Account.objects.filter(id=account_id, user_id=user_id).first)()
+        if not account:
+            await _send_bot_status(
+                connection_id,
+                {
+                    "state": "stopped",
+                    "reason": "Account not found for bot start.",
+                },
+            )
+            return
+        metadata = account.metadata if isinstance(account.metadata, dict) else {}
+        account_bot_risk = metadata.get("bot_risk") if isinstance(metadata.get("bot_risk"), dict) else {}
+        admin_settings = await _get_global_admin_system_settings(app, force_refresh=True)
+        admin_trading = admin_settings.get("trading", {})
+        admin_risk = admin_settings.get("risk", {})
+
+        # Extract bot parameters with precedence:
+        # payload explicit > account-specific > admin-global > hardcoded fallback
+        symbol = _pick_with_precedence(data.get("symbol"), account.bot_symbol, None, None)
+        interval = int(_pick_with_precedence(data.get("interval"), None, None, 60))
+        follow_signal_direction = bool(
+            _pick_with_precedence(
+                data.get("follow_signal_direction")
+                if "follow_signal_direction" in data
+                else None,
+                account.bot_follow_signal if hasattr(account, "bot_follow_signal") else None,
+                None,
+                True,
+            )
+        )
+        trade_type = str(
+            _pick_with_precedence(data.get("trade_type"), account.bot_trade_type, None, "RISE_FALL")
+        ).upper()
+        contract = str(
+            _pick_with_precedence(data.get("contract"), account.bot_contract, None, "RISE")
+        ).upper()
         
-        # Validate duration
+        # Validate duration (payload may omit and fallback to account duration).
         try:
-            duration_value, duration_unit, normalized_duration_seconds = _normalize_bot_duration(trade_type, data)
+            duration_payload = dict(data)
+            if duration_payload.get("duration") is None and getattr(account, "bot_duration", None) is not None:
+                duration_payload["duration"] = account.bot_duration
+            if duration_payload.get("duration_unit") is None and getattr(account, "bot_duration_unit", None):
+                duration_payload["duration_unit"] = account.bot_duration_unit
+            if duration_payload.get("duration_seconds") is None and getattr(account, "bot_duration", None):
+                # best-effort fallback for legacy consumers that only use seconds
+                duration_payload["duration_seconds"] = int(account.bot_duration)
+            duration_value, duration_unit, normalized_duration_seconds = _normalize_bot_duration(trade_type, duration_payload)
         except ValueError as exc:
             await _send_bot_status(
                 connection_id,
@@ -1302,7 +1518,14 @@ async def handle_ws_message(websocket: WebSocket, user_id: int, account_id: int,
             "enabled": True,
             "symbol": symbol,
             "interval": interval,
-            "stake": float(data.get("stake") or 0),
+            "stake": float(
+                _pick_with_precedence(
+                    data.get("stake"),
+                    float(account.bot_stake) if getattr(account, "bot_stake", None) is not None else None,
+                    None,
+                    0,
+                )
+            ),
             "duration_seconds": normalized_duration_seconds,
             "duration": duration_value,
             "duration_unit": duration_unit,
@@ -1310,15 +1533,73 @@ async def handle_ws_message(websocket: WebSocket, user_id: int, account_id: int,
             "contract": contract,
             "direction": direction,
             "follow_signal_direction": follow_signal_direction,
-            "strategy": (data.get("strategy") or "scalping").lower(),
-            "min_confidence": float(data.get("min_confidence") or 0.7),
-            "cooldown_seconds": int(data.get("cooldown_seconds") or 30),
-            "max_trades_per_session": int(data.get("max_trades_per_session") or 0),
-            "daily_loss_limit": float(data.get("daily_loss_limit") or 0),
-            "daily_profit_target": float(data.get("daily_profit_target") or 0),
-            "session_take_profit": float(data.get("session_take_profit") or 0),
-            "recovery_mode": str(data.get("recovery_mode") or "FIBONACCI").upper(),
-            "recovery_multiplier": float(data.get("recovery_multiplier") or 1.6),
+            "strategy": str(_pick_with_precedence(data.get("strategy"), account.bot_strategy, None, "scalping")).lower(),
+            "min_confidence": float(
+                _pick_with_precedence(
+                    data.get("min_confidence"),
+                    account.bot_min_confidence if getattr(account, "bot_min_confidence", None) is not None else None,
+                    admin_trading.get("minSignalConfidence"),
+                    0.7,
+                )
+            ),
+            "cooldown_seconds": int(
+                _pick_with_precedence(
+                    data.get("cooldown_seconds"),
+                    account.bot_cooldown_seconds if getattr(account, "bot_cooldown_seconds", None) is not None else None,
+                    None,
+                    30,
+                )
+            ),
+            "max_trades_per_session": int(
+                _pick_with_precedence(
+                    data.get("max_trades_per_session"),
+                    account.bot_max_trades_per_session if getattr(account, "bot_max_trades_per_session", None) is not None else None,
+                    None,
+                    0,
+                )
+            ),
+            "daily_loss_limit": float(
+                _pick_with_precedence(
+                    data.get("daily_loss_limit"),
+                    float(account.bot_daily_loss_limit)
+                    if getattr(account, "bot_daily_loss_limit", None) is not None
+                    else None,
+                    admin_risk.get("dailyLossLimit"),
+                    0,
+                )
+            ),
+            "daily_profit_target": float(
+                _pick_with_precedence(
+                    data.get("daily_profit_target"),
+                    account_bot_risk.get("daily_profit_target"),
+                    None,
+                    0,
+                )
+            ),
+            "session_take_profit": float(
+                _pick_with_precedence(
+                    data.get("session_take_profit"),
+                    account_bot_risk.get("session_take_profit"),
+                    None,
+                    0,
+                )
+            ),
+            "recovery_mode": str(
+                _pick_with_precedence(
+                    data.get("recovery_mode"),
+                    account_bot_risk.get("recovery_mode"),
+                    admin_trading.get("recoveryMode"),
+                    "FIBONACCI",
+                )
+            ).upper(),
+            "recovery_multiplier": float(
+                _pick_with_precedence(
+                    data.get("recovery_multiplier"),
+                    account_bot_risk.get("recovery_multiplier"),
+                    admin_trading.get("recoveryMultiplier"),
+                    1.6,
+                )
+            ),
             "session_trades": 0,
             "session_realized_profit": 0,
             "cooldown_until": 0,

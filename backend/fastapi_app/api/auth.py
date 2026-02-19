@@ -109,6 +109,7 @@ async def login(request: LoginRequest):
                 "username": user.username,
                 "email": user.email,
                 "is_staff": user.is_staff,
+                "is_superuser": user.is_superuser,
                 "affiliate_code": getattr(user, "affiliate_code", None),
             },
         )
@@ -298,6 +299,7 @@ async def get_current_user_profile(current_user: CurrentUser = Depends(get_curre
             "username": user.username,
             "email": user.email,
             "is_staff": user.is_staff,
+            "is_superuser": user.is_superuser,
             "affiliate_code": getattr(user, "affiliate_code", None),
             "markup_percentage": float(getattr(user, "markup_percentage", 0)),
             "created_at": user.created_at.isoformat() if hasattr(user, "created_at") else None,
