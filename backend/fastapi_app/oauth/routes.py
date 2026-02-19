@@ -189,14 +189,34 @@ async def _handle_oauth_callback(payload: OAuthCallbackRequest):
             if len(parts) > 1:
                 last_name = last_name or " ".join(parts[1:])
 
-    user, created = await sync_to_async(User.objects.get_or_create)(
-        username=username,
-        defaults={"email": email},
-    )
+    # Resolve existing local user by strongest identifiers first to avoid
+    # creating a second non-admin OAuth user for an existing admin email.
+    user = None
+    created = False
 
-    if not created:
+    if deriv_id:
+        user = await sync_to_async(User.objects.filter(deriv_id=str(deriv_id)).first)()
+
+    if not user and email:
+        user = await sync_to_async(User.objects.filter(email=email).first)()
+
+    if not user and username:
+        user = await sync_to_async(User.objects.filter(username=username).first)()
+
+    if user:
+        created = False
         if email and user.email != email:
-            user.email = email
+            email_taken = await sync_to_async(
+                User.objects.filter(email=email).exclude(id=user.id).exists
+            )()
+            if not email_taken:
+                user.email = email
+    else:
+        user = await sync_to_async(User.objects.create)(
+            username=username,
+            email=email,
+        )
+        created = True
 
     # Map Deriv fields onto user profile
     if deriv_id:
