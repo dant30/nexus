@@ -39,6 +39,7 @@ export const protectedRoutes = [
     path: "/dashboard/admin",
     label: "Admin",
     meta: "Ops",
+    roles: ["admin", "superadmin"],
     element: <AdminDashboard />,
   },
   {
@@ -99,9 +100,10 @@ export const protectedRoutes = [
 
 export const navigationRoutes = protectedRoutes
   .filter((route) => !route.hideInNav)
-  .map(({ path, label, meta }) => ({
+  .map(({ path, label, meta, roles }) => ({
     path,
     label,
     meta,
+    roles,
   }));
 

@@ -3,7 +3,9 @@ import { NavLink } from "react-router-dom";
 import { X } from "lucide-react";
 
 import { navigationRoutes } from "../../../router/routes.jsx";
+import { allowIfRole } from "../../../router/routeGuards.js";
 import { useBalance } from "../../../features/accounts/hooks/useBalance.js";
+import { useAuth } from "../../../features/auth/contexts/AuthContext.jsx";
 
 const getLinkClass = ({ isActive }) =>
   [
@@ -14,7 +16,9 @@ const getLinkClass = ({ isActive }) =>
   ].join(" ");
 
 export function Sidebar({ open, onClose }) {
+  const { user } = useAuth();
   const { balance, currency, accountType, loading, status } = useBalance();
+  const visibleRoutes = navigationRoutes.filter((route) => allowIfRole(user, route.roles || []));
 
   const accountLabel = accountType || "Account";
   const balanceLabel =
@@ -93,7 +97,7 @@ export function Sidebar({ open, onClose }) {
             <p className="px-4 py-3 text-xs uppercase tracking-wider text-white/40">Workspace</p>
 
             <nav className="space-y-1">
-              {navigationRoutes.map((route) => (
+              {visibleRoutes.map((route) => (
                 <NavLink
                   key={route.path}
                   to={route.path}
