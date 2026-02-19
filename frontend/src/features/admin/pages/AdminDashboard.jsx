@@ -5,6 +5,7 @@ import { useTradingContext } from "../../trading/contexts/TradingContext.jsx";
 import { useWebSocket } from "../../../providers/WSProvider.jsx";
 import {
   AdminHeader,
+  AdminSubnav,
   AdminMetricsGrid,
   AccountControlsPanel,
   RuntimeSnapshotPanel,
@@ -89,6 +90,7 @@ export function AdminDashboard() {
         onReconnectWS={reconnect}
         metricsLoading={tradesLoading}
       />
+      <AdminSubnav />
 
       <AdminMetricsGrid
         connected={connected}

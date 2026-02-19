@@ -1,5 +1,6 @@
 export * from "./pages/AdminDashboard.jsx";
 export * from "./pages/UserManagement.jsx";
+export * from "./pages/AccountsManagement.jsx";
 export * from "./pages/CommissionRules.jsx";
 export * from "./pages/SystemSettings.jsx";
 export * from "./pages/AuditLogs.jsx";

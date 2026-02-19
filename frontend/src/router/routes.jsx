@@ -6,6 +6,12 @@ import { OAuthRedirect } from "../features/auth/pages/OAuthRedirect.jsx";
 import { UserDashboard } from "../features/dashboard/pages/UserDashboard.jsx";
 import { TradingDashboard } from "../features/trading/pages/TradingDashboard.jsx";
 import { AdminDashboard } from "../features/admin/pages/AdminDashboard.jsx";
+import { UserManagement } from "../features/admin/pages/UserManagement.jsx";
+import { AccountsManagement } from "../features/admin/pages/AccountsManagement.jsx";
+import { Analytics } from "../features/admin/pages/Analytics.jsx";
+import { AuditLogs } from "../features/admin/pages/AuditLogs.jsx";
+import { CommissionRules } from "../features/admin/pages/CommissionRules.jsx";
+import { SystemSettings } from "../features/admin/pages/SystemSettings.jsx";
 import { NotificationCenter } from "../features/notifications/pages/NotificationCenter.jsx";
 import { ReferralDashboard } from "../features/referrals/pages/ReferralDashboard.jsx";
 import {
@@ -16,13 +22,19 @@ import {
   BillingSettings,
 } from "../features/settings/index.js";
 
+export const ADMIN_ROLES = ["admin", "superadmin"];
+export const adminRoute = (route) => ({
+  ...route,
+  roles: ADMIN_ROLES,
+});
+
 export const publicRoutes = [
   { path: "/login", element: <Login /> },
   { path: "/oauth/redirect", element: <OAuthRedirect /> },
   { path: "/oauth/callback", element: <OAuthCallback /> },
 ];
 
-export const protectedRoutes = [
+const baseProtectedRoutes = [
   {
     path: "/dashboard",
     label: "Overview",
@@ -35,13 +47,60 @@ export const protectedRoutes = [
     meta: "Live",
     element: <TradingDashboard />,
   },
-  {
+];
+
+const adminProtectedRoutes = [
+  adminRoute({
     path: "/dashboard/admin",
     label: "Admin",
     meta: "Ops",
-    roles: ["admin", "superadmin"],
     element: <AdminDashboard />,
-  },
+  }),
+  adminRoute({
+    path: "/dashboard/admin/users",
+    label: "Admin Users",
+    meta: "Users",
+    element: <UserManagement />,
+    hideInNav: true,
+  }),
+  adminRoute({
+    path: "/dashboard/admin/accounts",
+    label: "Admin Accounts",
+    meta: "Accounts",
+    element: <AccountsManagement />,
+    hideInNav: true,
+  }),
+  adminRoute({
+    path: "/dashboard/admin/analytics",
+    label: "Admin Analytics",
+    meta: "Analytics",
+    element: <Analytics />,
+    hideInNav: true,
+  }),
+  adminRoute({
+    path: "/dashboard/admin/commissions",
+    label: "Admin Commissions",
+    meta: "Commissions",
+    element: <CommissionRules />,
+    hideInNav: true,
+  }),
+  adminRoute({
+    path: "/dashboard/admin/audit",
+    label: "Admin Audit",
+    meta: "Audit",
+    element: <AuditLogs />,
+    hideInNav: true,
+  }),
+  adminRoute({
+    path: "/dashboard/admin/settings",
+    label: "Admin Settings",
+    meta: "Settings",
+    element: <SystemSettings />,
+    hideInNav: true,
+  }),
+];
+
+const sharedProtectedRoutes = [
   {
     path: "/dashboard/notifications",
     label: "Notifications",
@@ -54,6 +113,12 @@ export const protectedRoutes = [
     meta: "Growth",
     element: <ReferralDashboard />,
   },
+];
+
+export const protectedRoutes = [
+  ...baseProtectedRoutes,
+  ...adminProtectedRoutes,
+  ...sharedProtectedRoutes,
   {
     path: "/settings",
     label: "Settings",
