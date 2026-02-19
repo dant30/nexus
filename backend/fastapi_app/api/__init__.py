@@ -12,6 +12,7 @@ accounts_router = APIRouter(tags=["Accounts"])
 trades_router = APIRouter(tags=["Trades"])
 billing_router = APIRouter(tags=["Billing"])
 notifications_router = APIRouter(tags=["Notifications"])
+admin_router = APIRouter(tags=["Admin"])
 
 __all__ = [
     "auth_router",
@@ -20,4 +21,5 @@ __all__ = [
     "trades_router",
     "billing_router",
     "notifications_router",
+    "admin_router",
 ]

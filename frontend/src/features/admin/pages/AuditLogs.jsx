@@ -1,48 +1,56 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
+import { RefreshCw } from "lucide-react";
 import { Card } from "../../../shared/components/ui/cards/Card.jsx";
-import { useAccountContext } from "../../accounts/contexts/AccountContext.jsx";
-import { useTradingContext } from "../../trading/contexts/TradingContext.jsx";
-import { useWebSocket } from "../../../providers/WSProvider.jsx";
 import { AuditTable } from "../components/AuditTable.jsx";
 import { AdminSubnav } from "../components/Admin/index.js";
-import { buildAuditRows, createLiveAuditRow } from "../services/auditService.js";
+import { getAdminAudit } from "../services/auditService.js";
+import { useToast } from "../../notifications/hooks/useToast.js";
 
 export function AuditLogs() {
-  const { trades = [] } = useTradingContext();
-  const { accounts = [] } = useAccountContext() || {};
-  const ws = useWebSocket();
-  const [liveRows, setLiveRows] = useState([]);
+  const toast = useToast();
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  const loadAudit = async () => {
+    setLoading(true);
+    try {
+      const data = await getAdminAudit({ limit: 180 });
+      setRows(data.rows);
+    } catch (error) {
+      toast.error(error?.message || "Failed to load audit feed.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const offTradeStatus = ws.onMessage("trade_status", (payload = {}) => {
-      setLiveRows((prev) =>
-        [createLiveAuditRow({ type: "trade_status", payload }), ...prev].slice(0, 80)
-      );
-    });
-    const offSignals = ws.onMessage("signals_snapshot", (payload = {}) => {
-      setLiveRows((prev) =>
-        [createLiveAuditRow({ type: "signals_snapshot", payload }), ...prev].slice(0, 80)
-      );
-    });
-    return () => {
-      offTradeStatus?.();
-      offSignals?.();
-    };
-  }, [ws]);
-
-  const snapshotRows = useMemo(
-    () => buildAuditRows({ trades, accounts, ws }),
-    [trades, accounts, ws.connected, ws.reconnectAttempts]
-  );
-  const rows = [...liveRows, ...snapshotRows].sort((a, b) => (a.timestamp < b.timestamp ? 1 : -1)).slice(0, 200);
+    loadAudit();
+    const interval = setInterval(() => {
+      loadAudit();
+    }, 10000);
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <div className="space-y-4 p-6 text-white">
       <Card>
-        <p className="text-sm font-semibold text-white/90">Audit Logs</p>
-        <p className="mt-1 text-xs text-white/55">
-          Live and historical operational events across websocket and trades.
-        </p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-white/90">Audit Logs</p>
+            <p className="mt-1 text-xs text-white/55">
+              Global operational activity feed (trades, accounts, users).
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={loadAudit}
+            disabled={loading}
+            className="inline-flex items-center gap-2 rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-xs font-semibold text-white/80 transition hover:border-white/30 hover:bg-white/10 disabled:opacity-60"
+          >
+            <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+            Refresh
+          </button>
+        </div>
       </Card>
       <AdminSubnav />
 

@@ -64,6 +64,16 @@ export const API_ENDPOINTS = {
     LIST: `${API_BASE_URL}/notifications/`,
     MARK_READ: (id) => `${API_BASE_URL}/notifications/${id}/read`,
   },
+
+  // Admin
+  ADMIN: {
+    OVERVIEW: `${API_BASE_URL}/admin/overview`,
+    USERS: `${API_BASE_URL}/admin/users`,
+    ACCOUNTS: `${API_BASE_URL}/admin/accounts`,
+    ANALYTICS: `${API_BASE_URL}/admin/analytics`,
+    COMMISSIONS: `${API_BASE_URL}/admin/commissions`,
+    AUDIT: `${API_BASE_URL}/admin/audit`,
+  },
 };
 
 // WebSocket URLs

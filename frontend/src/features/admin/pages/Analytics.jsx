@@ -1,31 +1,42 @@
-import React, { useMemo } from "react";
+import React, { useEffect, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { Card } from "../../../shared/components/ui/cards/Card.jsx";
-import { useAccountContext } from "../../accounts/contexts/AccountContext.jsx";
-import { useTradingContext } from "../../trading/contexts/TradingContext.jsx";
 import { AdminSubnav } from "../components/Admin/index.js";
-import { buildAccountRows, buildSymbolPerformance } from "../services/adminService.js";
+import { getAdminAnalytics } from "../services/adminService.js";
+import { useToast } from "../../notifications/hooks/useToast.js";
 
 export function Analytics() {
-  const { accounts = [], activeAccount } = useAccountContext() || {};
-  const { trades = [], openTrades = [], refresh, loading } = useTradingContext();
+  const toast = useToast();
+  const [loading, setLoading] = useState(false);
+  const [windowDays, setWindowDays] = useState(30);
+  const [summary, setSummary] = useState({
+    closedTrades: 0,
+    openTrades: 0,
+    winRate: 0,
+    pnl: 0,
+  });
+  const [accountRows, setAccountRows] = useState([]);
+  const [symbolRows, setSymbolRows] = useState([]);
+  const currency = accountRows[0]?.currency || "USD";
 
-  const accountRows = useMemo(() => buildAccountRows({ accounts, trades }), [accounts, trades]);
-  const symbolRows = useMemo(() => buildSymbolPerformance({ trades }), [trades]);
-  const summary = useMemo(() => {
-    const closed = (Array.isArray(trades) ? trades : []).filter(
-      (trade) => String(trade.status || "").toUpperCase() !== "OPEN"
-    );
-    const wins = closed.filter((trade) => Number(trade.profit || 0) > 0).length;
-    const pnl = closed.reduce((sum, trade) => sum + Number(trade.profit || 0), 0);
-    return {
-      closedTrades: closed.length,
-      openTrades: Array.isArray(openTrades) ? openTrades.length : 0,
-      winRate: closed.length ? (wins / closed.length) * 100 : 0,
-      pnl,
-    };
-  }, [trades, openTrades]);
-  const currency = activeAccount?.currency || accounts[0]?.currency || "USD";
+  const loadAnalytics = async (days = windowDays) => {
+    setLoading(true);
+    try {
+      const data = await getAdminAnalytics({ days });
+      setSummary(data.summary);
+      setAccountRows(data.accounts);
+      setSymbolRows(data.symbols);
+      setWindowDays(data.windowDays || days);
+    } catch (error) {
+      toast.error(error?.message || "Failed to load global analytics.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadAnalytics(30);
+  }, []);
 
   return (
     <div className="space-y-4 p-6 text-white">
@@ -34,18 +45,33 @@ export function Analytics() {
           <div>
             <p className="text-sm font-semibold text-white/90">Analytics</p>
             <p className="mt-1 text-xs text-white/55">
-              Account and symbol performance metrics with live refresh support.
+              Global account and symbol performance metrics.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={refresh}
-            disabled={loading}
-            className="inline-flex items-center gap-2 rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-xs font-semibold text-white/80 transition hover:border-white/30 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
-            Refresh
-          </button>
+          <div className="flex gap-2">
+            <select
+              value={windowDays}
+              onChange={(event) => {
+                const days = Number(event.target.value);
+                setWindowDays(days);
+                loadAnalytics(days);
+              }}
+              className="rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-xs text-white/85 outline-none"
+            >
+              <option value={7}>Last 7 days</option>
+              <option value={30}>Last 30 days</option>
+              <option value={90}>Last 90 days</option>
+            </select>
+            <button
+              type="button"
+              onClick={() => loadAnalytics(windowDays)}
+              disabled={loading}
+              className="inline-flex items-center gap-2 rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-xs font-semibold text-white/80 transition hover:border-white/30 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+              Refresh
+            </button>
+          </div>
         </div>
       </Card>
       <AdminSubnav />

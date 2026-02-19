@@ -1091,6 +1091,7 @@ app.include_router(routes.accounts_router, prefix="/api/v1/accounts", tags=["Acc
 app.include_router(routes.trades_router, prefix="/api/v1/trades", tags=["Trades"])
 app.include_router(routes.billing_router, prefix="/api/v1/billing", tags=["Billing"])
 app.include_router(routes.notifications_router, prefix="/api/v1/notifications", tags=["Notifications"])
+app.include_router(routes.admin_router, prefix="/api/v1/admin", tags=["Admin"])
 app.include_router(oauth_routes.router, prefix="/api/v1/oauth", tags=["OAuth"])
 
 

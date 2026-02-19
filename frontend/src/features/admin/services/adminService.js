@@ -1,128 +1,155 @@
+import { apiClient } from "../../../core/api/client.js";
+import { API_ENDPOINTS } from "../../../core/constants/api.js";
+
+const buildQuery = (params = {}) => {
+  const search = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === "") return;
+    search.set(key, String(value));
+  });
+  const query = search.toString();
+  return query ? `?${query}` : "";
+};
+
 const toNumber = (value, fallback = 0) => {
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
 };
 
-const toRoleLabel = (user) => {
-  const role = String(user?.role || user?.user_type || "").toLowerCase();
-  if (user?.is_superuser || role === "superadmin") return "superadmin";
-  if (user?.is_admin || user?.is_staff || role === "admin") return "admin";
-  return role || "user";
+const toRoleLabel = (role = "") => {
+  const token = String(role || "").toLowerCase();
+  if (token === "superadmin") return "superadmin";
+  if (token === "admin") return "admin";
+  return "user";
 };
 
-export const buildUserRows = ({ user = null, accounts = [], trades = [] } = {}) => {
-  const tradeRows = Array.isArray(trades) ? trades : [];
-  const accountRows = Array.isArray(accounts) ? accounts : [];
-
-  const won = tradeRows.filter((trade) => toNumber(trade.profit, 0) > 0).length;
-  const closed = tradeRows.filter((trade) => String(trade.status || "").toUpperCase() !== "OPEN");
-  const netProfit = closed.reduce((sum, trade) => sum + toNumber(trade.profit, 0), 0);
-  const currency = accountRows[0]?.currency || "USD";
-
-  const currentUser = user
-    ? {
-        id: toNumber(user.id, 0) || 1,
-        name:
-          user.deriv_full_name?.trim() ||
-          `${user.first_name || ""} ${user.last_name || ""}`.trim() ||
-          user.username ||
-          "User",
-        username: user.username || "-",
-        email: user.email || "-",
-        role: toRoleLabel(user),
-        isActive: true,
-        accountCount: accountRows.length,
-        totalTrades: closed.length,
-        winRate: closed.length ? (won / closed.length) * 100 : 0,
-        netProfit,
-        currency,
-      }
-    : null;
-
-  return currentUser ? [currentUser] : [];
+export const getAdminOverview = async () => {
+  const data = await apiClient.get(API_ENDPOINTS.ADMIN.OVERVIEW);
+  return {
+    users: toNumber(data?.users, 0),
+    accounts: toNumber(data?.accounts, 0),
+    openTrades: toNumber(data?.open_trades, 0),
+    closedTrades: toNumber(data?.closed_trades, 0),
+    winRate: toNumber(data?.win_rate, 0),
+    netProfit: toNumber(data?.net_profit, 0),
+    roi: toNumber(data?.roi, 0),
+  };
 };
 
-export const buildAccountRows = ({ accounts = [], trades = [] } = {}) => {
-  const tradeRows = Array.isArray(trades) ? trades : [];
-  return (Array.isArray(accounts) ? accounts : []).map((account) => {
-    const scoped = tradeRows.filter((trade) => Number(trade.account_id) === Number(account.id));
-    const closed = scoped.filter((trade) => String(trade.status || "").toUpperCase() !== "OPEN");
-    const wins = closed.filter((trade) => toNumber(trade.profit, 0) > 0).length;
-    const pnl = closed.reduce((sum, trade) => sum + toNumber(trade.profit, 0), 0);
-    return {
-      id: account.id,
-      accountLabel: account.deriv_account_id || account.id,
-      currency: account.currency || "USD",
-      type: account.account_type || "-",
-      balance: toNumber(account.balance, 0),
-      trades: closed.length,
-      wins,
-      winRate: closed.length ? (wins / closed.length) * 100 : 0,
-      pnl,
-      isDefault: !!account.is_default,
-    };
-  });
-};
-
-export const buildCommissionRows = ({ trades = [], accounts = [] } = {}) => {
-  const accountMap = new Map((accounts || []).map((acc) => [Number(acc.id), acc]));
-  const rows = (Array.isArray(trades) ? trades : [])
-    .filter((trade) => String(trade.status || "").toUpperCase() !== "OPEN")
-    .map((trade) => {
-      const ts = trade.updated_at || trade.created_at;
-      const account = accountMap.get(Number(trade.account_id));
-      return {
-        id: trade.id,
-        time: ts
-          ? new Date(ts).toLocaleString(undefined, {
-              month: "short",
-              day: "numeric",
-              hour: "2-digit",
-              minute: "2-digit",
-            })
-          : "-",
-        accountLabel: account?.deriv_account_id || trade.account_id || "-",
-        symbol: trade.symbol || trade.underlying || "R_50",
-        stake: toNumber(trade.stake, 0),
-        commission: toNumber(trade.commission_applied, 0),
-        profit: toNumber(trade.profit, 0),
-        status: trade.status || "-",
-      };
-    })
-    .sort((a, b) => (a.time < b.time ? 1 : -1));
-
-  const totals = rows.reduce(
-    (acc, row) => ({
-      commission: acc.commission + row.commission,
-      profit: acc.profit + row.profit,
-    }),
-    { commission: 0, profit: 0 }
+export const getAdminUsers = async ({ search = "", limit = 50, offset = 0 } = {}) => {
+  const data = await apiClient.get(
+    `${API_ENDPOINTS.ADMIN.USERS}${buildQuery({ search, limit, offset })}`
   );
-
-  return { rows: rows.slice(0, 60), totals };
+  const items = Array.isArray(data?.items) ? data.items : [];
+  return {
+    total: toNumber(data?.total, 0),
+    rows: items.map((row) => ({
+      id: row.id,
+      name: row.name || row.username || "User",
+      username: row.username || "-",
+      email: row.email || "-",
+      role: toRoleLabel(row.role),
+      isActive: !!row.is_active,
+      accountCount: toNumber(row.account_count, 0),
+      totalTrades: toNumber(row.closed_trades, toNumber(row.total_trades, 0)),
+      winRate: toNumber(row.win_rate, 0),
+      netProfit: toNumber(row.net_profit, 0),
+      currency: Array.isArray(row.currencies) && row.currencies.length ? row.currencies[0] : "USD",
+      createdAt: row.created_at || null,
+      updatedAt: row.updated_at || null,
+    })),
+  };
 };
 
-export const buildSymbolPerformance = ({ trades = [] } = {}) => {
-  const grouped = new Map();
-  (Array.isArray(trades) ? trades : []).forEach((trade) => {
-    const symbol = trade.symbol || trade.underlying || "UNKNOWN";
-    const status = String(trade.status || "").toUpperCase();
-    if (status === "OPEN") return;
-    if (!grouped.has(symbol)) {
-      grouped.set(symbol, { symbol, trades: 0, wins: 0, losses: 0, pnl: 0 });
-    }
-    const row = grouped.get(symbol);
-    const profit = toNumber(trade.profit, 0);
-    row.trades += 1;
-    row.pnl += profit;
-    if (profit > 0) row.wins += 1;
-    if (profit < 0) row.losses += 1;
-  });
-
-  return Array.from(grouped.values())
-    .map((row) => ({
-      ...row,
-      winRate: row.trades > 0 ? (row.wins / row.trades) * 100 : 0,
-    }))
-    .sort((a, b) => b.trades - a.trades);
+export const getAdminAccounts = async ({ search = "", limit = 80, offset = 0 } = {}) => {
+  const data = await apiClient.get(
+    `${API_ENDPOINTS.ADMIN.ACCOUNTS}${buildQuery({ search, limit, offset })}`
+  );
+  const items = Array.isArray(data?.items) ? data.items : [];
+  return {
+    total: toNumber(data?.total, 0),
+    rows: items.map((row) => ({
+      id: row.id,
+      accountLabel: row.account_id || row.id,
+      type: row.account_type || "-",
+      currency: row.currency || "USD",
+      balance: toNumber(row.balance, 0),
+      trades: toNumber(row.closed_trades, toNumber(row.trades, 0)),
+      wins: toNumber(row.wins, 0),
+      losses: toNumber(row.losses, 0),
+      winRate: toNumber(row.win_rate, 0),
+      pnl: toNumber(row.net_profit, 0),
+      isDefault: !!row.is_default,
+      userId: row.user_id,
+      userUsername: row.user_username || "-",
+      userEmail: row.user_email || "-",
+      recoveryActive: !!row.recovery_active,
+      recoveryLevel: toNumber(row.recovery_level, 0),
+    })),
+  };
 };
+
+export const getAdminAnalytics = async ({ days = 30 } = {}) => {
+  const data = await apiClient.get(`${API_ENDPOINTS.ADMIN.ANALYTICS}${buildQuery({ days })}`);
+  const summary = data?.summary || {};
+  return {
+    summary: {
+      closedTrades: toNumber(summary.closed_trades, 0),
+      openTrades: toNumber(summary.open_trades, 0),
+      winRate: toNumber(summary.win_rate, 0),
+      pnl: toNumber(summary.net_profit, 0),
+    },
+    accounts: Array.isArray(data?.accounts)
+      ? data.accounts.map((row) => ({
+          id: row.id,
+          accountLabel: row.account_label || row.id,
+          type: row.account_type || "-",
+          currency: row.currency || "USD",
+          balance: toNumber(row.balance, 0),
+          trades: toNumber(row.trades, 0),
+          wins: toNumber(row.wins, 0),
+          losses: toNumber(row.losses, 0),
+          winRate: toNumber(row.win_rate, 0),
+          pnl: toNumber(row.pnl, 0),
+        }))
+      : [],
+    symbols: Array.isArray(data?.symbols)
+      ? data.symbols.map((row) => ({
+          symbol: row.symbol || "UNKNOWN",
+          trades: toNumber(row.trades, 0),
+          wins: toNumber(row.wins, 0),
+          losses: toNumber(row.losses, 0),
+          winRate: toNumber(row.win_rate, 0),
+          pnl: toNumber(row.pnl, 0),
+        }))
+      : [],
+    windowDays: toNumber(data?.window_days, days),
+  };
+};
+
+export const getAdminCommissions = async ({ limit = 100 } = {}) => {
+  const data = await apiClient.get(`${API_ENDPOINTS.ADMIN.COMMISSIONS}${buildQuery({ limit })}`);
+  const totals = data?.totals || {};
+  const items = Array.isArray(data?.items) ? data.items : [];
+  return {
+    total: toNumber(data?.total, 0),
+    totals: {
+      commission: toNumber(totals.commission, 0),
+      profit: toNumber(totals.profit, 0),
+    },
+    rows: items.map((row) => ({
+      id: row.id,
+      time: row.time,
+      accountLabel: row.account_label || row.account_id || "-",
+      accountId: row.account_id,
+      username: row.username || "-",
+      symbol: row.symbol || "UNKNOWN",
+      stake: toNumber(row.stake, 0),
+      commission: toNumber(row.commission, 0),
+      profit: toNumber(row.profit, 0),
+      status: row.status || "-",
+      currency: row.currency || "USD",
+    })),
+  };
+};
+
