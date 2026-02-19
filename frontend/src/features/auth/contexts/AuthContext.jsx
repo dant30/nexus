@@ -31,7 +31,14 @@ const applyAuthResponse = (data, setState) => {
 
   const accessToken = data.access_token;
   const refreshToken = data.refresh_token;
-  const user = data.user || data.account || null;
+  const incomingUser = data.user || data.account || null;
+  const storedUser = AuthStorage.getUser();
+  const user = incomingUser
+    ? {
+        ...(storedUser || {}),
+        ...incomingUser,
+      }
+    : storedUser;
 
   if (accessToken) {
     AuthStorage.setTokens(accessToken, refreshToken, user);

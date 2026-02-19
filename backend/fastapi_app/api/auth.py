@@ -140,6 +140,10 @@ async def refresh_token(request: RefreshTokenRequest):
         if not user_id or not username:
             raise ValueError("Invalid token payload")
         
+        user = await sync_to_async(User.objects.filter(id=user_id).first)()
+        if not user:
+            raise ValueError("User not found for refresh token")
+
         # Generate new access token
         access_token = TokenManager.create_token(user_id, username)
         
@@ -149,7 +153,14 @@ async def refresh_token(request: RefreshTokenRequest):
             access_token=access_token,
             refresh_token=request.refresh_token,  # Return same refresh token
             expires_in=settings.JWT_EXPIRATION,
-            user={"id": user_id, "username": username},
+            user={
+                "id": user_id,
+                "username": username,
+                "email": user.email,
+                "is_staff": user.is_staff,
+                "is_superuser": user.is_superuser,
+                "affiliate_code": getattr(user, "affiliate_code", None),
+            },
         )
         
     except Exception as e:

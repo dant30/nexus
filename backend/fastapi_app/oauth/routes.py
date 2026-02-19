@@ -328,6 +328,8 @@ async def _handle_oauth_callback(payload: OAuthCallbackRequest):
             "id": user.id,
             "username": user.username,
             "email": user.email,
+            "is_staff": bool(getattr(user, "is_staff", False)),
+            "is_superuser": bool(getattr(user, "is_superuser", False)),
             "first_name": user.first_name,
             "last_name": user.last_name,
             "deriv_id": user.deriv_id,
