@@ -7,6 +7,7 @@ from decimal import Decimal
 from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 from asgiref.sync import sync_to_async
 from django.db.models import Q
 from django.utils import timezone
@@ -17,6 +18,7 @@ django.setup()
 from django.contrib.auth import get_user_model
 from django_core.accounts.models import Account
 from django_core.trades.models import Trade
+from django_core.audit.models import AuditLog
 from fastapi_app.deps import CurrentUser, get_current_user
 from shared.utils.logger import log_error, get_logger
 
@@ -24,6 +26,37 @@ logger = get_logger("admin")
 User = get_user_model()
 
 router = APIRouter(tags=["Admin"])
+
+
+DEFAULT_ADMIN_SETTINGS = {
+    "trading": {
+        "recoveryMode": "FIBONACCI",
+        "recoveryMultiplier": 1.6,
+        "minSignalConfidence": 0.7,
+    },
+    "risk": {
+        "dailyLossLimit": 50,
+        "maxConsecutiveLosses": 5,
+        "maxStakePercent": 5,
+    },
+}
+
+
+class AdminTradingSettingsPayload(BaseModel):
+    recoveryMode: str = Field(default="FIBONACCI")
+    recoveryMultiplier: float = Field(default=1.6, ge=1.0, le=20.0)
+    minSignalConfidence: float = Field(default=0.7, ge=0.0, le=1.0)
+
+
+class AdminRiskSettingsPayload(BaseModel):
+    dailyLossLimit: float = Field(default=50.0, ge=0.0)
+    maxConsecutiveLosses: int = Field(default=5, ge=1, le=100)
+    maxStakePercent: float = Field(default=5.0, ge=0.1, le=100.0)
+
+
+class AdminSystemSettingsPayload(BaseModel):
+    trading: AdminTradingSettingsPayload
+    risk: AdminRiskSettingsPayload
 
 
 def _to_decimal(value) -> Decimal:
@@ -564,3 +597,77 @@ async def get_admin_audit(
     except Exception as exc:
         log_error("Failed to fetch admin audit feed", exception=exc)
         raise HTTPException(status_code=500, detail="Failed to fetch audit feed")
+
+
+@router.get("/settings")
+async def get_admin_settings(current_user: CurrentUser = Depends(get_current_user)):
+    """Get persisted global admin system settings."""
+    try:
+        await _require_admin_user(current_user.user_id)
+
+        latest = await sync_to_async(
+            AuditLog.objects.filter(action=AuditLog.ACTION_SYSTEM_SETTINGS_UPDATED)
+            .order_by("-created_at")
+            .first
+        )()
+        if not latest:
+            return DEFAULT_ADMIN_SETTINGS
+
+        payload = latest.metadata if isinstance(latest.metadata, dict) else {}
+        trading = payload.get("trading") if isinstance(payload.get("trading"), dict) else {}
+        risk = payload.get("risk") if isinstance(payload.get("risk"), dict) else {}
+
+        return {
+            "trading": {
+                "recoveryMode": str(trading.get("recoveryMode") or DEFAULT_ADMIN_SETTINGS["trading"]["recoveryMode"]).upper(),
+                "recoveryMultiplier": float(trading.get("recoveryMultiplier") or DEFAULT_ADMIN_SETTINGS["trading"]["recoveryMultiplier"]),
+                "minSignalConfidence": float(trading.get("minSignalConfidence") or DEFAULT_ADMIN_SETTINGS["trading"]["minSignalConfidence"]),
+            },
+            "risk": {
+                "dailyLossLimit": float(risk.get("dailyLossLimit") or DEFAULT_ADMIN_SETTINGS["risk"]["dailyLossLimit"]),
+                "maxConsecutiveLosses": int(risk.get("maxConsecutiveLosses") or DEFAULT_ADMIN_SETTINGS["risk"]["maxConsecutiveLosses"]),
+                "maxStakePercent": float(risk.get("maxStakePercent") or DEFAULT_ADMIN_SETTINGS["risk"]["maxStakePercent"]),
+            },
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        log_error("Failed to fetch admin settings", exception=exc)
+        raise HTTPException(status_code=500, detail="Failed to fetch admin settings")
+
+
+@router.put("/settings")
+async def update_admin_settings(
+    payload: AdminSystemSettingsPayload,
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Persist global admin system settings."""
+    try:
+        user = await _require_admin_user(current_user.user_id)
+        normalized = {
+            "trading": {
+                "recoveryMode": str(payload.trading.recoveryMode or "FIBONACCI").upper(),
+                "recoveryMultiplier": float(payload.trading.recoveryMultiplier),
+                "minSignalConfidence": float(payload.trading.minSignalConfidence),
+            },
+            "risk": {
+                "dailyLossLimit": float(payload.risk.dailyLossLimit),
+                "maxConsecutiveLosses": int(payload.risk.maxConsecutiveLosses),
+                "maxStakePercent": float(payload.risk.maxStakePercent),
+            },
+        }
+        await sync_to_async(AuditLog.objects.create)(
+            user=user,
+            action=AuditLog.ACTION_SYSTEM_SETTINGS_UPDATED,
+            description="Admin system settings updated",
+            metadata=normalized,
+        )
+        return {
+            "success": True,
+            "settings": normalized,
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        log_error("Failed to update admin settings", exception=exc)
+        raise HTTPException(status_code=500, detail="Failed to save admin settings")

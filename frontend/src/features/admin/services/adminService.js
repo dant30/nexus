@@ -153,3 +153,37 @@ export const getAdminCommissions = async ({ limit = 100 } = {}) => {
   };
 };
 
+export const getAdminSystemSettings = async () => {
+  const data = await apiClient.get(API_ENDPOINTS.ADMIN.SETTINGS);
+  const trading = data?.trading || {};
+  const risk = data?.risk || {};
+  return {
+    trading: {
+      recoveryMode: String(trading.recoveryMode || "FIBONACCI").toUpperCase(),
+      recoveryMultiplier: toNumber(trading.recoveryMultiplier, 1.6),
+      minSignalConfidence: toNumber(trading.minSignalConfidence, 0.7),
+    },
+    risk: {
+      dailyLossLimit: toNumber(risk.dailyLossLimit, 50),
+      maxConsecutiveLosses: toNumber(risk.maxConsecutiveLosses, 5),
+      maxStakePercent: toNumber(risk.maxStakePercent, 5),
+    },
+  };
+};
+
+export const updateAdminSystemSettings = async ({ trading, risk } = {}) => {
+  const payload = {
+    trading: {
+      recoveryMode: String(trading?.recoveryMode || "FIBONACCI").toUpperCase(),
+      recoveryMultiplier: toNumber(trading?.recoveryMultiplier, 1.6),
+      minSignalConfidence: toNumber(trading?.minSignalConfidence, 0.7),
+    },
+    risk: {
+      dailyLossLimit: toNumber(risk?.dailyLossLimit, 50),
+      maxConsecutiveLosses: Math.max(1, Math.round(toNumber(risk?.maxConsecutiveLosses, 5))),
+      maxStakePercent: toNumber(risk?.maxStakePercent, 5),
+    },
+  };
+  const data = await apiClient.put(API_ENDPOINTS.ADMIN.SETTINGS, payload);
+  return data?.settings || payload;
+};

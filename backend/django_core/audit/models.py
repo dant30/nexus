@@ -13,6 +13,7 @@ class AuditLog(models.Model):
     ACTION_WITHDRAWAL = "WITHDRAWAL"
     ACTION_DEPOSIT = "DEPOSIT"
     ACTION_COMMISSION_AWARDED = "COMMISSION_AWARDED"
+    ACTION_SYSTEM_SETTINGS_UPDATED = "SYSTEM_SETTINGS_UPDATED"
     ACTION_CHOICES = (
         (ACTION_USER_LOGIN, "User Login"),
         (ACTION_USER_LOGOUT, "User Logout"),
@@ -21,6 +22,7 @@ class AuditLog(models.Model):
         (ACTION_WITHDRAWAL, "Withdrawal"),
         (ACTION_DEPOSIT, "Deposit"),
         (ACTION_COMMISSION_AWARDED, "Commission Awarded"),
+        (ACTION_SYSTEM_SETTINGS_UPDATED, "System Settings Updated"),
     )
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="audit_logs")

@@ -8,11 +8,9 @@ import { useTradingContext } from "../../trading/contexts/TradingContext.jsx";
 import { useToast } from "../../notifications/hooks/useToast.js";
 import { AdminSubnav } from "../components/Admin/index.js";
 import {
-  getTradingPreferences,
-  saveTradingPreferences,
-  getRiskSettings,
-  saveRiskSettings,
-} from "../../settings/services/settingsService.js";
+  getAdminSystemSettings,
+  updateAdminSystemSettings,
+} from "../services/adminService.js";
 
 const defaultTradingState = {
   recoveryMode: "FIBONACCI",
@@ -39,21 +37,20 @@ export function SystemSettings() {
     let mounted = true;
     const hydrate = async () => {
       try {
-        const [tradingPrefs, riskPrefs] = await Promise.all([
-          getTradingPreferences(),
-          getRiskSettings(),
-        ]);
+        const settings = await getAdminSystemSettings();
         if (!mounted) return;
         setTradingConfig({
-          recoveryMode: String(tradingPrefs.recoveryMode || "FIBONACCI").toUpperCase(),
-          recoveryMultiplier: Number(tradingPrefs.recoveryMultiplier || 1.6),
-          minSignalConfidence: Number(tradingPrefs.minSignalConfidence || 0.7),
+          recoveryMode: String(settings.trading?.recoveryMode || "FIBONACCI").toUpperCase(),
+          recoveryMultiplier: Number(settings.trading?.recoveryMultiplier || 1.6),
+          minSignalConfidence: Number(settings.trading?.minSignalConfidence || 0.7),
         });
         setRiskConfig({
-          dailyLossLimit: Number(riskPrefs.dailyLossLimit || 50),
-          maxConsecutiveLosses: Number(riskPrefs.maxConsecutiveLosses || 5),
-          maxStakePercent: Number(riskPrefs.maxStakePercent || 5),
+          dailyLossLimit: Number(settings.risk?.dailyLossLimit || 50),
+          maxConsecutiveLosses: Number(settings.risk?.maxConsecutiveLosses || 5),
+          maxStakePercent: Number(settings.risk?.maxStakePercent || 5),
         });
+      } catch (error) {
+        toast.error(error?.message || "Failed to load admin system settings.");
       } finally {
         if (mounted) setLoadingPrefs(false);
       }
@@ -67,13 +64,23 @@ export function SystemSettings() {
   const saveAll = async () => {
     setSaving(true);
     try {
-      await Promise.all([
-        saveTradingPreferences(tradingConfig),
-        saveRiskSettings(riskConfig),
-      ]);
+      const saved = await updateAdminSystemSettings({
+        trading: tradingConfig,
+        risk: riskConfig,
+      });
+      setTradingConfig({
+        recoveryMode: String(saved.trading?.recoveryMode || "FIBONACCI").toUpperCase(),
+        recoveryMultiplier: Number(saved.trading?.recoveryMultiplier || 1.6),
+        minSignalConfidence: Number(saved.trading?.minSignalConfidence || 0.7),
+      });
+      setRiskConfig({
+        dailyLossLimit: Number(saved.risk?.dailyLossLimit || 50),
+        maxConsecutiveLosses: Number(saved.risk?.maxConsecutiveLosses || 5),
+        maxStakePercent: Number(saved.risk?.maxStakePercent || 5),
+      });
       toast.success("System preferences saved.");
-    } catch {
-      toast.error("Failed to save system preferences.");
+    } catch (error) {
+      toast.error(error?.message || "Failed to save system preferences.");
     } finally {
       setSaving(false);
     }

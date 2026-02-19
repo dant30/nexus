@@ -73,6 +73,7 @@ export const API_ENDPOINTS = {
     ANALYTICS: `${API_BASE_URL}/admin/analytics`,
     COMMISSIONS: `${API_BASE_URL}/admin/commissions`,
     AUDIT: `${API_BASE_URL}/admin/audit`,
+    SETTINGS: `${API_BASE_URL}/admin/settings`,
   },
 };
 
