@@ -6,6 +6,7 @@ services:
     region: ohio
     rootDir: backend
     autoDeploy: true
+    healthCheckPath: /api/health/
     buildCommand: bash ./build.sh
     startCommand: gunicorn django_core.config.wsgi:application --bind 0.0.0.0:$PORT --workers 2 --timeout 60
     envVars:
