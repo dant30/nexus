@@ -6,7 +6,7 @@ services:
     region: ohio
     rootDir: backend
     autoDeploy: true
-    healthCheckPath: /api/health/
+    healthCheckPath: /health
     buildCommand: bash ./build.sh
     startCommand: gunicorn fastapi_app.asgi:asgi_app -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT --workers 2 --timeout 60
     envVars:
