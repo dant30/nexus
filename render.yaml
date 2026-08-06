@@ -67,8 +67,6 @@ services:
   - type: web
     name: nexus-frontend
     env: static
-    plan: free
-    region: ohio
     rootDir: frontend
     autoDeploy: true
     buildCommand: npm ci && npm run build
