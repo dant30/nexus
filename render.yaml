@@ -55,7 +55,7 @@ services:
       - key: ADMIN_RESET_PASSWORD_ON_START
         value: "false"
       - key: DERIV_API_KEY
-        value: wElagIDHA2n3I4P
+        value: 342xHUlHkA5VStQcmDyuF
       - key: DERIV_APP_ID
         value: "113709"
       - key: DERIV_OAUTH_CALLBACK_URL
