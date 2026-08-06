@@ -24,7 +24,7 @@ class DerivOAuthClient:
     """
 
     AUTHORIZE_URL = "https://auth.deriv.com/oauth2/auth"
-    TOKEN_URL = "https://oauth.deriv.com/oauth2/token"
+    TOKEN_URL = "https://auth.deriv.com/oauth2/token"
     WS_BASE_URL = "wss://ws.derivws.com/websockets/v3"
 
     def __init__(self):
