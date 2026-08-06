@@ -9,18 +9,42 @@ export function OAuthCallback() {
 
   useEffect(() => {
     const run = async () => {
-      const params = new URLSearchParams(window.location.search);
-      const code = params.get("code");
-      const state = params.get("state") || "nexus";
-      const token = params.get("token1") || params.get("token");
-      const accountId = params.get("acct1") || params.get("account_id");
-      const currency = params.get("cur1") || params.get("currency");
-      const token2 = params.get("token2");
-      const accountId2 = params.get("acct2");
-      const currency2 = params.get("cur2");
+      const searchParams = new URLSearchParams(window.location.search || window.location.hash.replace(/^#/, ""));
+      const error = searchParams.get("error");
+      const errorDescription = searchParams.get("error_description");
+      const code = searchParams.get("code");
+      const state = searchParams.get("state") || "nexus";
+      const token = searchParams.get("token1") || searchParams.get("token");
+      const accountId = searchParams.get("acct1") || searchParams.get("account_id");
+      const currency = searchParams.get("cur1") || searchParams.get("currency");
+      const token2 = searchParams.get("token2");
+      const accountId2 = searchParams.get("acct2");
+      const currency2 = searchParams.get("cur2");
+
+      console.debug("OAuth callback params", {
+        code,
+        state,
+        token,
+        accountId,
+        currency,
+        token2,
+        accountId2,
+        currency2,
+        error,
+        errorDescription,
+      });
+
+      if (error) {
+        const errorMessage = `OAuth provider returned an error: ${error}${errorDescription ? ` - ${errorDescription}` : ""}`;
+        console.error(errorMessage, { error, errorDescription });
+        setStatus(errorMessage);
+        return;
+      }
 
       if (!code && !token) {
-        setStatus("Missing authorization response. Please retry.");
+        setStatus(
+          "Missing authorization response. Please retry or verify that your OAuth callback URL is correct."
+        );
         return;
       }
 
@@ -40,7 +64,9 @@ export function OAuthCallback() {
       if (result.ok) {
         navigate("/dashboard", { replace: true });
       } else {
-        setStatus("OAuth failed. Please try again from the login page.");
+        console.error("OAuth callback failed", result.error);
+        const message = result.error?.message || "OAuth failed. Please try again from the login page.";
+        setStatus(message);
       }
     };
 

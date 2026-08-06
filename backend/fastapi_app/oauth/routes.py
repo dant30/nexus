@@ -394,6 +394,15 @@ async def deriv_oauth_callback(request: OAuthCallbackRequest):
     Exchange code for token and create/update user.
     """
     try:
+        log_info(
+            "Received POST Deriv OAuth callback",
+            payload={
+                "code": bool(request.code),
+                "token": bool(request.token),
+                "account_id": bool(request.account_id),
+                "accounts": len(request.accounts or []),
+            },
+        )
         return await _handle_oauth_callback(request)
     
     except HTTPException:
@@ -423,6 +432,16 @@ async def deriv_oauth_callback_get(
     Handle Deriv OAuth callback via GET (query params).
     """
     try:
+        log_info(
+            "Received GET Deriv OAuth callback",
+            query_params={
+                "code": bool(code),
+                "token": bool(token or token1),
+                "account_id": bool(account_id or acct1),
+                "acct2": bool(acct2),
+                "token2": bool(token2),
+            },
+        )
         accounts = []
         if acct1 and token1:
             accounts.append({"account_id": acct1, "token": token1, "currency": cur1})

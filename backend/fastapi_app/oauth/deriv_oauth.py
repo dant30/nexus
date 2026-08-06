@@ -36,7 +36,7 @@ class DerivOAuthClient:
     # OAuth Authorization
     # ------------------------------------------------------------------
 
-    def get_authorization_url(self) -> str:
+    def get_authorization_url(self, state: str = "nexus") -> str:
         """
         Generate OAuth authorization URL for frontend redirect.
         """
@@ -45,10 +45,11 @@ class DerivOAuthClient:
             "scope": "read write",
             "redirect_uri": self.callback_url,
             "response_type": "code",
+            "state": state,
         }
 
         url = f"{self.AUTHORIZE_URL}?{urllib.parse.urlencode(params)}"
-        log_info("OAuth authorization URL generated")
+        log_info("OAuth authorization URL generated", redirect_uri=self.callback_url, state=state)
         return url
 
     # ------------------------------------------------------------------
