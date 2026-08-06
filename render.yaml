@@ -40,9 +40,9 @@ services:
           name: nexus-redis
           property: connectionString
       - key: CORS_ALLOWED_ORIGINS
-        value: https://nexus-b8zu.onrender.com,http://localhost:3000,http://localhost:5173
+        value: https://nexus-frontend-vcio.onrender.com,http://localhost:3000,http://localhost:5173
       - key: CSRF_TRUSTED_ORIGINS
-        value: https://nexus-b8zu.onrender.com,https://nexus-backend-xsl2.onrender.com
+        value: https://nexus-frontend-vcio.onrender.com,https://nexus-backend-vs4r.onrender.com
       - key: CORS_ALLOW_ALL_ORIGINS
         value: "false"
       - key: CORS_ALLOW_CREDENTIALS
@@ -60,7 +60,7 @@ services:
       - key: DERIV_APP_ID
         value: "113709"
       - key: DERIV_OAUTH_CALLBACK_URL
-        value: https://nexus-b8zu.onrender.com/oauth/callback
+        value: https://nexus-frontend-vcio.onrender.com/oauth/callback
       - key: ENVIRONMENT
         value: production
 
@@ -77,15 +77,15 @@ services:
         destination: /index.html
     envVars:
       - key: VITE_API_BASE_URL
-        value: https://nexus-backend-xsl2.onrender.com/api/v1
+        value: https://nexus-backend-vs4r.onrender.com/api/v1
       - key: VITE_APP_ENV
         value: production
       - key: VITE_APP_NAME
         value: "Nexus Trading Bot"
       - key: VITE_DERIV_REDIRECT_URL
-        value: https://nexus-b8zu.onrender.com/oauth/callback
+        value: https://nexus-frontend-vcio.onrender.com/oauth/callback
       - key: VITE_WS_BASE_URL
-        value: wss://nexus-backend-xsl2.onrender.com/ws
+        value: wss://nexus-backend-vs4r.onrender.com/ws
 
   - type: redis
     name: nexus-redis
