@@ -64,7 +64,7 @@ services:
       - key: ENVIRONMENT
         value: production
 
-  - type: static
+  - type: web
     name: nexus-frontend
     env: static
     plan: free
