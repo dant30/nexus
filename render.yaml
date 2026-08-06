@@ -58,7 +58,7 @@ services:
       - key: COLLECT_STATIC
         value: "true"
       - key: DERIV_API_KEY
-        value: 342xHUlHkA5VStQcmDyuF
+        value: pat_4938ab9106d048ad35181d466e6bcf94d322e5ae5ce3ca1dc780a98dd55e996b
       - key: DERIV_APP_ID
         value: "113709"
       - key: DERIV_OAUTH_CALLBACK_URL
