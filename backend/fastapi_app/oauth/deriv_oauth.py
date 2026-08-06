@@ -23,7 +23,7 @@ class DerivOAuthClient:
     Handles authorization flow, token exchange, and account data.
     """
 
-    AUTHORIZE_URL = "https://oauth.deriv.com/oauth2/authorize"
+    AUTHORIZE_URL = "https://auth.deriv.com/oauth2/auth"
     TOKEN_URL = "https://oauth.deriv.com/oauth2/token"
     WS_BASE_URL = "wss://ws.derivws.com/websockets/v3"
 
@@ -43,13 +43,15 @@ class DerivOAuthClient:
         params = {
             "app_id": self.app_id,
             "scope": "read write",
+            "l": "EN",
+            "brand": "deriv",
             "redirect_uri": self.callback_url,
             "response_type": "code",
             "state": state,
         }
 
         url = f"{self.AUTHORIZE_URL}?{urllib.parse.urlencode(params)}"
-        log_info("OAuth authorization URL generated", redirect_uri=self.callback_url, state=state)
+        log_info("OAuth authorization URL generated", redirect_uri=self.callback_url, state=state, url=url)
         return url
 
     # ------------------------------------------------------------------
