@@ -92,7 +92,7 @@ fi
 
 if [ "$COLLECT_STATIC" = true ]; then
     log "Collecting static files..."
-    python "$PROJECT_DIR/manage.py" collectstatic --noinput
+    python "$PROJECT_DIR/manage.py" collectstatic --noinput --clear
 else
     log "Skipping static files collection"
 fi

@@ -7,6 +7,9 @@ from shared.settings.env import env
 DEBUG = False
 ALLOWED_HOSTS = env.get_list("ALLOWED_HOSTS", ["nexus.example.com"])
 
+# WhiteNoise should sit early in the middleware chain
+MIDDLEWARE.insert(1, "whitenoise.middleware.WhiteNoiseMiddleware")
+
 # Security settings for production
 SECURE_SSL_REDIRECT = True
 SESSION_COOKIE_SECURE = True
@@ -37,7 +40,7 @@ INSTALLED_APPS += [
     "compressor",
 ]
 
-STATICFILES_STORAGE = "django.contrib.staticfiles.storage.ManifestStaticFilesStorage"
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 # Cache configuration for production (Redis)
 CACHES = {
